@@ -1,0 +1,77 @@
+export const cases = [
+  {
+    id: "the-dao",
+    title: "The DAO Hack",
+    year: 2016,
+    category: "Smart Contract Exploit",
+    epitaph: "The wound that split Ethereum into two histories.",
+    loss: "$60M+",
+    chain: "Ethereum",
+    summary:
+      "In June 2016, an attacker exploited a reentrancy vulnerability in The DAO's smart contract, recursively draining approximately 3.6 million ETH before the community could respond. The Ethereum Foundation's controversial decision to hard-fork the chain to recover funds created a permanent schism — giving birth to Ethereum Classic and raising questions about immutability that the ecosystem still debates today.",
+    evidence: [
+      "Reentrancy bug in the splitDAO() function allowed recursive withdrawals before balance updates.",
+      "Attacker drained ~3.6M ETH (~$60M at the time) into a child DAO.",
+      "The attack unfolded over hours while developers scrambled to respond.",
+      "Ethereum hard-forked at block 1,920,000 to reverse the theft — a decision that split the community.",
+      "Ethereum Classic (ETC) was born from those who refused the fork, upholding 'code is law'.",
+    ],
+    lessons: [
+      "Always update state before making external calls — the checks-effects-interactions pattern exists for this reason.",
+      "Immutability is a double-edged sword: it protects users from censorship but also from rescue.",
+      "Governance under crisis reveals the true values of a decentralized community.",
+      "Auditing smart contracts before deploying high-value funds is non-negotiable.",
+    ],
+  },
+  {
+    id: "terra-luna",
+    title: "Terra Luna Collapse",
+    year: 2022,
+    category: "Algorithmic Stablecoin Collapse",
+    epitaph: "An algorithmic empire buried under its own promise of stability.",
+    loss: "$40B+",
+    chain: "Terra",
+    summary:
+      "In May 2022, TerraUSD (UST) — an algorithmic stablecoin pegged to $1 via a mint-burn mechanism with LUNA — lost its peg and triggered a hyperinflationary death spiral. As UST depegged, the protocol minted exponentially more LUNA to restore the peg, destroying LUNA's value in days. Over $40 billion in market cap evaporated, wiping out retail investors and shaking the entire crypto market. The collapse exposed the fundamental fragility of endogenous collateral systems.",
+    evidence: [
+      "UST relied solely on LUNA as collateral — a reflexive system with no external backing.",
+      "Anchor Protocol offered 20% APY on UST, attracting unsustainable capital inflows.",
+      "Large coordinated UST sell-offs on May 7–8 triggered the initial depeg.",
+      "The mint-burn mechanism went into hyperinflationary overdrive: LUNA supply went from 350M to 6.5 trillion tokens in days.",
+      "LUNA price collapsed from ~$80 to fractions of a cent within 72 hours.",
+      "Do Kwon's Luna Foundation Guard deployed $3B in BTC reserves — insufficient to stop the spiral.",
+    ],
+    lessons: [
+      "Algorithmic stablecoins backed by endogenous assets are inherently fragile under coordinated attacks.",
+      "Artificially high yields (Anchor's 20% APY) mask systemic risk and attract speculative rather than stable capital.",
+      "Reflexive collateral systems can unwind faster than any intervention can operate.",
+      "Regulators and investors must distinguish between collateralized and algorithmic stablecoins.",
+    ],
+  },
+  {
+    id: "ftx",
+    title: "FTX Collapse",
+    year: 2022,
+    category: "Centralized Exchange Collapse",
+    epitaph: "A centralized throne disguised as a decentralized dream.",
+    loss: "$8B+",
+    chain: "Multiple",
+    summary:
+      "In November 2022, FTX — once the world's third-largest crypto exchange — collapsed in under a week after a leaked balance sheet revealed that Alameda Research, FTX's sister trading firm, held a balance sheet dominated by FTT (FTX's own exchange token). A cascade of withdrawal requests exposed a $8B+ shortfall: customer funds had been secretly lent to Alameda for high-risk investments. CEO Sam Bankman-Fried was arrested and later convicted on multiple counts of fraud and conspiracy, marking the largest financial fraud in crypto history.",
+    evidence: [
+      "Leaked Alameda balance sheet showed ~$5.8B of $14.6B in assets were FTT — illiquid and self-issued.",
+      "Binance's CZ announced he would liquidate all FTT holdings, triggering a bank run.",
+      "FTX processed $6B in withdrawals in 72 hours before freezing all outflows.",
+      "On-chain analysis revealed ~$8B in customer funds were transferred to Alameda.",
+      "FTX filed for Chapter 11 bankruptcy on November 11, 2022.",
+      "SBF was arrested in the Bahamas on December 12, 2022; convicted on all 7 counts in November 2023.",
+    ],
+    lessons: [
+      "Centralized exchanges must undergo mandatory proof-of-reserves audits with third-party verification.",
+      "Commingling customer funds with proprietary trading operations is fraud, regardless of intent.",
+      "Celebrity endorsements and effective altruism branding are not substitutes for financial transparency.",
+      "Self-issued exchange tokens as primary collateral are a critical red flag.",
+      "The collapse accelerated global regulatory pressure on centralized crypto exchanges.",
+    ],
+  },
+];
