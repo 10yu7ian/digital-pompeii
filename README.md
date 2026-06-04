@@ -167,8 +167,8 @@ python -m http.server 8000     # 浏览器打开 http://localhost:8000
 
 | 成员 | 分工 |
 |---|---|
-| 〈你的名字〉 | 前端黑暗博物馆 · 策展叙事 / prompt 设计 |
-| 〈她的名字〉 | 后端 Agent · 链上数据 · 运营 |
+| Riso | 前端黑暗博物馆 · 策展叙事 / prompt 设计 |
+| 10yu7ian | 后端 Agent · 链上数据 · 运营 |
 
 ## Built with
 
