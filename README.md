@@ -1,16 +1,180 @@
-# React + Vite
+<!-- 提交前请全局搜索 〈 把所有占位符替换成真实内容 -->
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+# 数字庞贝 · Digital Pompeii
 
-Currently, two official plugins are available:
+> 一座为链上失败而建的去中心化废墟博物馆。
+> An autonomous on-chain coroner & curator — for the projects that died of greed, bugs, and betrayal.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+**一句话**：输入一个已经死去的链上项目地址，一个自主 Agent 会像法医一样，从不可篡改的链上证据里还原它真正的死因，再像策展人一样，把它立成一座兼具技术严谨与文学重量的「警示碑」，陈列在一座黑暗博物馆里。
 
-## React Compiler
+- 🎬 Demo 视频：〈3–5 分钟视频链接〉
+- 🌐 在线演示：〈可访问的 Demo 链接〉
+- 🏛️ 赛道：Z.AI · Web3 × Long-Horizon Task
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+---
 
-## Expanding the ESLint configuration
+## 一、它解决什么问题（现实意义）
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+在 Web2 世界，公司的失败和丑闻可以被公关、被删帖、被时间掩埋。但在链上，哪怕一个项目跑路、崩盘、被黑，它的「尸体」——智能合约与每一笔交易——依然不可篡改地、永远地沉睡在区块链上。
+
+**数字庞贝**用这一点，对抗 Web2 的遗忘机制：
+
+- **公共物品（Public Goods）**：我们用不可篡改的技术，为后来的建造者立起一座座警示碑——警惕贪婪，敬畏代码。每一件展品都是一份可追溯、可复核的事故档案。
+- **去中心化的现实意义**：失败的记录不该由任何中心化平台决定能不能被看见。链上的尸体删不掉，我们只是把它策展出来。
+
+---
+
+## 二、它如何工作（核心：长程自主 Agent）
+
+数字庞贝不是一个「把准备好的资料喂给模型润色」的内容工具。它的核心是一个**自主、多步、会自我纠错的链上法医 Agent**，由 〈GLM-5.1〉 驱动：
+
+```
+输入：一个合约地址
+  │
+  ▼
+① 勘验现场   ── Agent 自主调用工具，取得已验证源码与基本信息
+② 解剖代码   ── 通读源码，标出可疑函数 / 权限 / 缺失校验
+③ 追踪血流   ── 拉取并追踪关键交易，定位「致命一刀」落在哪一笔
+④ 死因假设   ── 基于代码缺陷 + 交易证据，提出死因
+⑤ 交叉验证   ── 主动找反证、复核每条结论；证据冲突则修正  ← 自我纠错
+⑥ 结案产出   ── 证据链成立后，生成「双层展品」
+  │
+  ▼
+输出：一件展品（technical findings + 文学墓志铭，结构化 JSON）
+```
+
+**双层产物**，泾渭分明：
+- **技术尸检层**（冷峻、可追溯）：死因、每条带证据与 `tx_hash` 的尸检结论、时间线、致命交易、损失规模。
+- **策展词层**（史学家与诗人的声音）：悲剧文学笔触的墓志铭，与刻给后来者的工程警示。
+
+> 设计铁律：**先调查、后文学；技术层零虚构。** 文学只为已查实的事实赋形，每个出现在墓志铭里的数字都必须在技术层里有据可查。证据不足时 Agent 明确标注「存疑」，绝不编造。
+
+---
+
+## 三、架构
+
+```
+┌─────────────────────────────────────────────┐
+│  前端 · 黑暗博物馆 (frontend/)                 │
+│  纯 HTML/CSS，渲染展品 JSON 成展厅             │
+└───────────────▲─────────────────────────────┘
+                │  展品 JSON（约定 schema）
+┌───────────────┴─────────────────────────────┐
+│  后端 · 法医 Agent (backend/agent.py)         │
+│  ├─ 运行时大脑：〈GLM-5.1 via Z.AI API〉       │
+│  ├─ system prompt：策展人/法医人设            │
+│  └─ tool-calling 循环：自主调用下列工具        │
+│        • get_contract_source  (Etherscan)    │
+│        • get_transactions     (Etherscan)    │
+│        • get_tx_detail        (Etherscan)    │
+└───────────────▲─────────────────────────────┘
+                │  只读
+        ┌───────┴────────┐
+        │  以太坊链上数据  │   （可选）OpenTimestamps：
+        │  (Etherscan API)│    将报告哈希锚定上链，永久防篡改
+        └────────────────┘
+```
+
+- **数据接口**：后端与前端通过一份《展品 JSON 规范》解耦（见 `docs/exhibit_schema.json`），两端可并行开发。
+- **全程只读链**：本项目不向链上写入、不持有私钥、不连接钱包（上链存证为可选模块，使用免费的 OpenTimestamps）。
+
+技术栈：Python · 〈GLM-5.1 / Z.AI API（OpenAI 兼容）〉 · Etherscan API · 原生 HTML/CSS。
+
+---
+
+## 四、GLM-5.1 调用位置与关键流程
+
+> 本节为 Z.AI 赛道必填项。
+
+- **调用位置**：`backend/agent.py` 中的 Agent 主循环。`system` 字段加载 `docs/curator_system_prompt.md`（法医/策展人人设与方法论）。
+- **关键流程**：模型在循环中**自主决定每一步该调用哪个工具、查什么**——不是固定脚本。它根据上一步工具返回的结果，决定下一步是继续读代码、还是去拉某笔交易、还是已经可以下结论；并在定稿前对自己的结论做一轮反证复核（自我纠错）。最终由模型生成符合 schema 的双层 JSON。
+- **为何是长程任务**：单个案例通常需要 〈N〉 轮工具调用与多次假设修正才能结案，模型需在整个过程中保持目标一致、不跑偏——这正是 GLM-5.1 长程执行能力被关键性使用的地方，而非一次性问答。
+
+调用示例（OpenAI 兼容）：
+```python
+from openai import OpenAI
+client = OpenAI(api_key=ZAI_API_KEY, base_url="https://api.z.ai/api/paas/v4/")
+# model="glm-5.1"，注册 tools，循环执行 tool calls 直至结案
+```
+<!-- 若运行时改用 Claude：把上面替换为 anthropic 客户端、model 改为 claude-sonnet-4-6，本节同步更新 -->
+
+---
+
+## 五、运行方式
+
+```bash
+# 1. 克隆
+git clone 〈仓库地址〉 && cd digital-pompeii
+
+# 2. 后端环境
+cd backend
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt                      # openai / requests / python-dotenv
+
+# 3. 配置密钥
+cp .env.example .env
+#   在 .env 填入：ZAI_API_KEY=...   ETHERSCAN_API_KEY=...
+
+# 4. 对一个合约跑尸检（输出 data/<id>.json）
+python agent.py --address 0x〈合约地址〉
+
+# 5. 启动前端博物馆
+cd ../frontend
+python -m http.server 8000     # 浏览器打开 http://localhost:8000
+```
+
+---
+
+## 六、长程任务运行记录
+
+每次调查的完整过程（任务拆解、每一次工具调用与返回、假设的提出与修正、最终交付）记录在 `runs/` 下，可复现、可审计。Demo 视频中也展示了 Agent 当场自主调查的实时过程。
+
+示例运行：〈链接到一份 run log 或截图〉
+
+---
+
+## 七、Web3 证明
+
+- **真实链上调查**：以下为已收录的真实案例（均在 Etherscan 上有已验证源码、死因链上可读）：
+  - The DAO（2016 · 重入攻击）— `〈合约地址〉`
+  - 〈案例 2〉— `〈合约地址〉`
+  - 〈案例 3〉— `〈合约地址〉`
+- **链上存证（可选）**：每件展品的报告哈希通过 OpenTimestamps 锚定，作为「不可篡改的警示碑」凭证 — 〈OTS 凭证链接〉
+
+---
+
+## 八、安全 · 成本 · 权限边界
+
+> 本节为赛道必填项。
+
+- **权限边界**：全程**只读链上公开数据**，不写链、不持私钥、不连钱包、不发起任何交易。可选的上链存证仅写入内容哈希（OpenTimestamps，免费、无需钱包）。
+- **失败处理 / 人工介入**：LLM 可能出错，因此**每条技术结论都附链上证据、可人工复核**；证据不足时 Agent 主动标注「存疑」而非臆测。
+- **风险措辞**：本项目（及未来的「上线前死因体检」功能）输出的是**风险信号，而非安全保证**。不对任何项目作「安全 / 不会出事」的承诺。
+- **成本**：主要成本为 〈GLM-5.1〉 API 调用与 Etherscan 免费额度；注意调查循环的 token 消耗，已设单次调查的工具调用上限。
+
+---
+
+## 九、商业与迭代路线
+
+- **现在（黑客松 MVP）**：废墟博物馆 + 自主法医 Agent —— 品牌、公共物品与免费获客入口。
+- **下一步**：把同一套法医能力**调转枪口做预防**——「上线前 / 上车前死因体检」，按历史死因库逐条比对新项目的猝死风险（高频、可付费）。
+- **护城河**：每验一具尸，**死因库**就厚一层、体检就更准——一个会复利、抄不走的数据资产。
+- **更远**：可分享的「链上人格镜像」做病毒漏斗导流；3D 展馆；社区共同策展。
+
+---
+
+## 十、团队
+
+| 成员 | 分工 |
+|---|---|
+| 〈你的名字〉 | 前端黑暗博物馆 · 策展叙事 / prompt 设计 |
+| 〈她的名字〉 | 后端 Agent · 链上数据 · 运营 |
+
+## Built with
+
+〈GLM-5.1 (Z.AI)〉 · Etherscan API · OpenTimestamps · Python。
+开发过程使用 Claude Code / Codex / Cursor 辅助编码。
+
+## License
+
+MIT
