@@ -1,0 +1,138 @@
+{
+  "contract_address": "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5",
+  "contract_name": "Diamond",
+  "simulation_mode": true,
+  "death_cause": "重入攻击（Reentrancy Attack）",
+  "confidence": 0.6,
+  "severity": "high",
+  "evidence": [
+    "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+  ],
+  "technical_findings": [
+    {
+      "evidence_type": "code_vulnerability",
+      "tx_hash": null,
+      "involved_addresses": [
+        "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+      ],
+      "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
+      "confidence": 0.8
+    },
+    {
+      "evidence_type": "code_vulnerability",
+      "tx_hash": null,
+      "involved_addresses": [
+        "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+      ],
+      "reasoning": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。",
+      "confidence": 0.6
+    },
+    {
+      "evidence_type": "historical_record",
+      "tx_hash": null,
+      "involved_addresses": [
+        "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+      ],
+      "reasoning": "合约 Diamond 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 30230 bytes，满足取证基本要求。",
+      "confidence": 0.99
+    }
+  ],
+  "counter_evidence": [],
+  "all_hypotheses": [
+    {
+      "cause": "重入攻击（Reentrancy Attack）",
+      "confidence": 0.6,
+      "severity": "high",
+      "evidence": [
+        "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+      ],
+      "status": "proposed",
+      "refutation_evidence": [],
+      "replaced_by": null,
+      "round_proposed": 1,
+      "round_revised": null,
+      "counter_evidence": []
+    }
+  ],
+  "alternative_hypotheses": [],
+  "code_signals": [
+    {
+      "type": "delegatecall",
+      "severity": "high",
+      "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+    },
+    {
+      "type": "centralization",
+      "severity": "medium",
+      "description": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。"
+    }
+  ],
+  "suspicious_outflows": [],
+  "suspicious_tx_details": [],
+  "timeline": [
+    {
+      "hash": "0x144771e1d60db2db7e0b0a786805fe34299c335472920e9336c17e6afd718ed4",
+      "from": "0x43a9da9bade357843fbe7e5ee3eedd910f9fac1e",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1772074259"
+    },
+    {
+      "hash": "0xe17c2117319cbd8ade7bd689731019aa85242716c2999ee52435af560b47f353",
+      "from": "0x82f402847051bddaab0f5d4b481417281837c424",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1769712071"
+    },
+    {
+      "hash": "0xbac01cb0d14ff789f530a729834fb24df293bf0777a7a1f30922766de6b5fb59",
+      "from": "0x750e762e3bf7afa113faacf5a8ec5c690a19d700",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1764694367"
+    },
+    {
+      "hash": "0xa6f8d3621e8a26bae8661eb4b900a77554d87d7974248c55cc8cfbe8dea8e366",
+      "from": "0xcdea6a23b9383a88e246975ad3f38778ee0e81fc",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1759365875"
+    },
+    {
+      "hash": "0xf35ee9580d3b111b24c763f9208dfdef20c516f348845a8686916b2231d84aef",
+      "from": "0x63b98c09120e4ef75b4c122d79b39875f28a6fcc",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1758655487"
+    },
+    {
+      "hash": "0x3c86101ad7aee8952b0f848a5ec2cdad648e258b9241bc9de930ad2fec43169e",
+      "from": "0x4282341588f94c158bfaa40ae2c9f3abfdac647f",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1754841779"
+    },
+    {
+      "hash": "0xbc745e37389a9848c0074847408b30fc51ef99e26b91b7b44aa485f418daae53",
+      "from": "0x4088e870e785320413288c605fd1bd6bd9d5bdae",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1747674407"
+    },
+    {
+      "hash": "0xd80f5b2c1e72587e46c68378177c568faed55b02bdf0bb4a72f7fd20a5c18e90",
+      "from": "0x8d4122ffe442de3574871b9648868c1c3396a0af",
+      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
+      "value_wei": 5000000000000000,
+      "value_eth": 0.005,
+      "timeStamp": "1740268319"
+    }
+  ]
+}

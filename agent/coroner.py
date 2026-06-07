@@ -37,6 +37,18 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 
 # ---------------------------------------------------------------------------
+# 自定义异常
+# ---------------------------------------------------------------------------
+
+class InvestigationError(RuntimeError):
+    """调查过程中可预期的失败，携带 error_type 供调用方区分处理。"""
+
+    def __init__(self, message: str, error_type: str = "unknown") -> None:
+        super().__init__(message)
+        self.error_type = error_type
+
+
+# ---------------------------------------------------------------------------
 # Tool Schemas（OpenAI function-calling 格式）
 # ---------------------------------------------------------------------------
 
@@ -121,18 +133,38 @@ def _get_etherscan_api_key() -> str:
 
 
 def _request_etherscan(params: Dict[str, Any]) -> Any:
-    response = requests.get(
-        ETHERSCAN_API_URL,
-        params={**params, "apikey": _get_etherscan_api_key(), "chainid": ETHEREUM_CHAIN_ID},
-        timeout=20,
-    )
-    response.raise_for_status()
+    try:
+        response = requests.get(
+            ETHERSCAN_API_URL,
+            params={**params, "apikey": _get_etherscan_api_key(), "chainid": ETHEREUM_CHAIN_ID},
+            timeout=20,
+        )
+        response.raise_for_status()
+    except requests.Timeout as exc:
+        raise InvestigationError(
+            f"Etherscan API 请求超时（20s）：{params.get('action', '')}",
+            error_type="api_timeout",
+        ) from exc
+    except requests.ConnectionError as exc:
+        raise InvestigationError(
+            f"网络连接失败，请检查网络后重试：{exc}",
+            error_type="network_error",
+        ) from exc
+    except requests.HTTPError as exc:
+        raise InvestigationError(
+            f"Etherscan HTTP 错误：{exc}",
+            error_type="api_http_error",
+        ) from exc
+
     payload = response.json()
     status = payload.get("status")
     message = payload.get("message")
     result = payload.get("result")
     if status == "0" and isinstance(result, str) and "No transactions found" not in result:
-        raise RuntimeError(f"Etherscan API 错误：{message} — {result}")
+        raise InvestigationError(
+            f"Etherscan API 业务错误：{message} — {result}",
+            error_type="api_error",
+        )
     return result
 
 
@@ -252,6 +284,8 @@ def execute_tool(tool_name: str, tool_args: Dict[str, Any]) -> Any:
         return {"error": f"未知工具：{tool_name}"}
     try:
         return fn(tool_args)
+    except InvestigationError:
+        raise   # 透传给 run_investigation_safe 统一处理
     except Exception as exc:
         return {"error": str(exc)}
 
@@ -567,6 +601,15 @@ class RunLogger:
                 "timestamp": datetime.datetime.now().isoformat(),
                 **event,
             })
+
+    def log_error(self, error_type: str, message: str, round_num: int = 0) -> None:
+        self._write({
+            "type": "error",
+            "round": round_num,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "error_type": error_type,
+            "message": message,
+        })
 
     def log_synthesis(self, exhibit: Dict[str, Any]) -> None:
         self._write({
@@ -1099,6 +1142,89 @@ class CoronerAgent:
         return exhibit
 
     # ------------------------------------------------------------------
+    # 安全入口：捕获所有异常，返回"调查未完成"展品
+    # ------------------------------------------------------------------
+
+    def run_investigation_safe(
+        self,
+        contract_address: str,
+        output_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        run_investigation 的容错版本。
+        任何 InvestigationError 或意外异常都会被捕获，
+        返回包含 status='incomplete' 的标准 JSON 而不是抛出异常。
+        """
+        try:
+            return self.run_investigation(contract_address, output_path=output_path)
+        except InvestigationError as exc:
+            exhibit = self._incomplete_exhibit(contract_address, exc.error_type, str(exc))
+            self._save_and_log_incomplete(exhibit, output_path, exc.error_type, str(exc))
+            return exhibit
+        except Exception as exc:  # noqa: BLE001
+            exhibit = self._incomplete_exhibit(contract_address, "unknown", str(exc))
+            self._save_and_log_incomplete(exhibit, output_path, "unknown", str(exc))
+            return exhibit
+
+    @staticmethod
+    def _incomplete_exhibit(
+        contract_address: str, error_type: str, error_message: str
+    ) -> Dict[str, Any]:
+        """生成"调查未完成"的标准展品 JSON。"""
+        return {
+            "contract_address": contract_address,
+            "status": "incomplete",
+            "error_type": error_type,
+            "error_message": error_message,
+            "timestamp": datetime.datetime.now().isoformat(),
+            "contract_name": None,
+            "simulation_mode": SIMULATION_MODE,
+            "death_cause": None,
+            "confidence": None,
+            "severity": None,
+            "evidence": [],
+            "technical_findings": [],
+            "counter_evidence": [],
+            "all_hypotheses": [],
+            "alternative_hypotheses": [],
+            "code_signals": [],
+            "suspicious_outflows": [],
+            "suspicious_tx_details": [],
+            "timeline": [],
+        }
+
+    def _save_and_log_incomplete(
+        self,
+        exhibit: Dict[str, Any],
+        output_path: Optional[str],
+        error_type: str,
+        error_message: str,
+    ) -> None:
+        print(f"\n[ERROR] 调查未完成 [{error_type}]: {error_message}")
+        if output_path:
+            out = Path(output_path)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            out.write_text(json.dumps(exhibit, ensure_ascii=False, indent=2), encoding="utf-8")
+            print(f"[INCOMPLETE] 部分结果已保存：{out.resolve()}")
+        # 尝试写错误日志（logger 可能尚未初始化，故用独立路径）
+        try:
+            RUNS_DIR.mkdir(parents=True, exist_ok=True)
+            ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            addr_short = exhibit["contract_address"][2:10]
+            err_log = RUNS_DIR / f"error_{ts}_{addr_short}.jsonl"
+            with err_log.open("w", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "type": "error",
+                    "timestamp": exhibit["timestamp"],
+                    "contract_address": exhibit["contract_address"],
+                    "error_type": error_type,
+                    "message": error_message,
+                }, ensure_ascii=False) + "\n")
+            print(f"[INCOMPLETE] 错误日志：{err_log.resolve()}")
+        except Exception:  # noqa: BLE001
+            pass
+
+    # ------------------------------------------------------------------
     # 综合分析（循环结束后调用）
     # ------------------------------------------------------------------
 
@@ -1202,6 +1328,12 @@ class CoronerAgent:
 
         primary = revised[0] if revised else None
 
+        # ⑦ 构建结构化取证发现（technical_findings）
+        technical_findings = self._build_technical_findings(
+            code_signals, fund_result, tx_detail_findings,
+            contract_source, transactions
+        )
+
         exhibit = {
             "contract_address": self.state["contract_address"],
             "contract_name": contract_name,
@@ -1210,9 +1342,9 @@ class CoronerAgent:
             "confidence": primary["confidence"] if primary else 0.0,
             "severity": primary.get("severity") if primary else None,
             "evidence": primary.get("evidence", []) if primary else [],
+            "technical_findings": technical_findings,
             "counter_evidence": primary.get("counter_evidence", []) if primary else [],
             "all_hypotheses": revised,
-            # 被修正/推翻的历史假设（本次新增字段）
             "alternative_hypotheses": alternative_hypotheses,
             "code_signals": code_signals,
             "suspicious_outflows": fund_result.get("suspicious_outflows", []),
@@ -1223,8 +1355,72 @@ class CoronerAgent:
         self._log("death_cause", exhibit["death_cause"])
         self._log("confidence", exhibit["confidence"])
         self._log("severity", exhibit["severity"])
+        self._log("technical_findings 条数", len(technical_findings))
         self._log("alternative_hypotheses 数量", len(alternative_hypotheses))
         return exhibit
+
+    @staticmethod
+    def _build_technical_findings(
+        code_signals: List[Dict[str, Any]],
+        fund_result: Dict[str, Any],
+        tx_detail_findings: List[Dict[str, Any]],
+        contract_source: Dict[str, Any],
+        transactions: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """将各维度分析结果转换为统一的结构化取证条目（technical_findings 格式）。"""
+        findings: List[Dict[str, Any]] = []
+        address = contract_source.get("address", "")
+
+        # 代码漏洞信号 → code_vulnerability 条目
+        for sig in code_signals:
+            findings.append({
+                "evidence_type": "code_vulnerability",
+                "tx_hash": None,
+                "involved_addresses": [address] if address else [],
+                "reasoning": sig["description"],
+                "confidence": {
+                    "critical": 0.90, "high": 0.80, "medium": 0.60, "low": 0.35,
+                }.get(sig.get("severity", "low"), 0.50),
+            })
+
+        # 可疑大额资金流出 → fund_flow 条目
+        for outflow in fund_result.get("suspicious_outflows", []):
+            findings.append({
+                "evidence_type": "fund_flow",
+                "tx_hash": outflow.get("hash"),
+                "involved_addresses": list(filter(None, [
+                    outflow.get("from"), outflow.get("to")
+                ])),
+                "reasoning": outflow.get("flag", "检测到可疑大额资金转出。"),
+                "confidence": 0.80,
+            })
+
+        # 交易详情异常 → on_chain_transaction 条目
+        for detail in tx_detail_findings:
+            findings.append({
+                "evidence_type": "on_chain_transaction",
+                "tx_hash": detail.get("hash"),
+                "involved_addresses": [address] if address else [],
+                "reasoning": detail.get("note", "交易执行结果异常。"),
+                "confidence": 0.75,
+            })
+
+        # 合约基本信息核实 → historical_record 条目
+        if contract_source.get("verified"):
+            findings.append({
+                "evidence_type": "historical_record",
+                "tx_hash": None,
+                "involved_addresses": [address] if address else [],
+                "reasoning": (
+                    f"合约 {contract_source.get('contract_name', 'Unknown')} 源码已在 Etherscan 验证，"
+                    f"编译器版本 {contract_source.get('compiler_version', '未知')}，"
+                    f"源码大小 {len(contract_source.get('source_code', ''))} bytes，"
+                    f"满足取证基本要求。"
+                ),
+                "confidence": 0.99,
+            })
+
+        return findings
 
     # ------------------------------------------------------------------
     # 状态更新
@@ -1394,26 +1590,153 @@ class CoronerAgent:
 # CLI 入口
 # ---------------------------------------------------------------------------
 
-def main() -> None:
-    import sys
+def _parse_args(argv: List[str]) -> Dict[str, Any]:
+    """
+    解析 CLI 参数，返回配置字典。
 
-    args = sys.argv[1:]
-    address = "0x0000000000000000000000000000000000000000"
-    output_path: Optional[str] = None
+    单地址模式（默认）：
+      coroner.py <address> [-o output.json]
+
+    批量模式：
+      coroner.py --batch <addr1> <addr2> ... [-o output_dir/]
+      coroner.py --batch-file addresses.txt  [-o output_dir/]
+
+    通用选项：
+      --quiet / -q     关闭 verbose 输出（批量模式默认安静）
+      --output / -o    单地址时为文件路径；批量时为输出目录
+    """
+    cfg: Dict[str, Any] = {
+        "mode": "single",
+        "addresses": [],
+        "output": None,
+        "verbose": True,
+        "batch_file": None,
+    }
 
     i = 0
-    while i < len(args):
-        if args[i] in ("--output", "-o") and i + 1 < len(args):
-            output_path = args[i + 1]
+    while i < len(argv):
+        arg = argv[i]
+        if arg == "--batch":
+            cfg["mode"] = "batch"
+            cfg["verbose"] = False
+            i += 1
+            while i < len(argv) and not argv[i].startswith("-"):
+                cfg["addresses"].append(argv[i])
+                i += 1
+        elif arg == "--batch-file":
+            cfg["mode"] = "batch"
+            cfg["verbose"] = False
+            cfg["batch_file"] = argv[i + 1]
             i += 2
-        elif not args[i].startswith("-"):
-            address = args[i]
+        elif arg in ("--output", "-o") and i + 1 < len(argv):
+            cfg["output"] = argv[i + 1]
+            i += 2
+        elif arg in ("--quiet", "-q"):
+            cfg["verbose"] = False
+            i += 1
+        elif not arg.startswith("-"):
+            cfg["addresses"].append(arg)
             i += 1
         else:
             i += 1
 
-    agent = CoronerAgent(verbose=True)
-    exhibit = agent.run_investigation(address, output_path=output_path)
+    return cfg
+
+
+def _run_batch(
+    addresses: List[str],
+    output_dir: Optional[str],
+    verbose: bool,
+) -> None:
+    """批量调查多个合约地址，汇总结果并打印摘要。"""
+    if not addresses:
+        print("[ERROR] 批量模式：未提供任何合约地址。")
+        return
+
+    out_dir = Path(output_dir) if output_dir else RUNS_DIR / "batch"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    results: List[Dict[str, Any]] = []
+    successes: List[str] = []
+    failures: List[Dict[str, str]] = []
+
+    total = len(addresses)
+    for idx, address in enumerate(addresses, 1):
+        print(f"\n[{idx}/{total}] 调查：{address}")
+        agent = CoronerAgent(verbose=verbose)
+        addr_slug = address[2:10].lower() if address.startswith("0x") else address[:8]
+        out_file = out_dir / f"{addr_slug}.json"
+
+        exhibit = agent.run_investigation_safe(address, output_path=str(out_file))
+        results.append(exhibit)
+
+        if exhibit.get("status") == "incomplete":
+            failures.append({
+                "address": address,
+                "error_type": exhibit.get("error_type", "unknown"),
+                "error_message": exhibit.get("error_message", ""),
+            })
+            print(f"  [FAIL] {exhibit.get('error_type')}: {exhibit.get('error_message', '')[:80]}")
+        else:
+            successes.append(address)
+            print(
+                f"  [OK]   {exhibit.get('contract_name', 'Unknown'):20s}"
+                f" confidence={exhibit.get('confidence', 0):.2f}"
+                f" findings={len(exhibit.get('technical_findings', []))}"
+            )
+
+    # 写汇总文件
+    summary = {
+        "timestamp": datetime.datetime.now().isoformat(),
+        "total": total,
+        "succeeded": len(successes),
+        "failed": len(failures),
+        "success_addresses": successes,
+        "failures": failures,
+        "exhibits": results,
+    }
+    summary_path = out_dir / "batch_summary.json"
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    print(f"\n{'=' * 62}")
+    print(f"  批量调查完成  {len(successes)}/{total} 成功，{len(failures)} 失败")
+    print(f"  汇总文件：{summary_path.resolve()}")
+    print(f"  展品目录：{out_dir.resolve()}")
+    if failures:
+        print(f"\n  失败列表：")
+        for f in failures:
+            print(f"    [{f['error_type']}] {f['address']} — {f['error_message'][:60]}")
+    print(f"{'=' * 62}\n")
+
+
+def main() -> None:
+    import sys
+
+    cfg = _parse_args(sys.argv[1:])
+
+    # 从 batch-file 加载地址
+    if cfg["batch_file"]:
+        bf = Path(cfg["batch_file"])
+        if not bf.exists():
+            print(f"[ERROR] 地址文件不存在：{bf}")
+            sys.exit(1)
+        lines = bf.read_text(encoding="utf-8").splitlines()
+        cfg["addresses"] = [
+            ln.split()[0] for ln in lines
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+
+    if cfg["mode"] == "batch":
+        _run_batch(cfg["addresses"], cfg["output"], cfg["verbose"])
+        return
+
+    # ── 单地址模式 ──────────────────────────────────────────────────
+    address = cfg["addresses"][0] if cfg["addresses"] else "0x0000000000000000000000000000000000000000"
+    output_path: Optional[str] = cfg["output"]
+    verbose: bool = cfg["verbose"]
+
+    agent = CoronerAgent(verbose=verbose)
+    exhibit = agent.run_investigation_safe(address, output_path=output_path)
 
     print("\n" + "=" * 62)
     print("  最终结案展品 (Exhibit JSON)")

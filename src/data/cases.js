@@ -4,7 +4,12 @@
 //   death_cause                               ← 死亡原因（中文）
 //   confidence                                ← 置信度 0–1
 //   timeline[]  { timestamp, event }          ← 攻击时间线（中文）
-//   evidence[]  { description, reference }    ← 链上证据（中文）
+//   technical_findings[]                      ← 结构化取证证据
+//     ├ evidence_type  string                 ← "code_vulnerability" | "on_chain_transaction" | "fund_flow" | "historical_record"
+//     ├ tx_hash        string | null          ← 关联交易哈希（可选）
+//     ├ involved_addresses  string[]          ← 相关地址列表
+//     ├ reasoning      string                 ← 推理说明（中文）
+//     └ confidence     number (0–1)           ← 该条证据的置信度
 //   alternative_hypotheses[]                  ← 替代假设（中文）
 //   epitaph                                   ← 墓志铭（英文）
 // ────────────────────────────────────────────────────────────────────────────
@@ -45,26 +50,52 @@ export const cases = [
       },
     ],
 
-    evidence: [
+    technical_findings: [
       {
-        description: "splitDAO() 函数在扣减发起者余额之前便向外部合约发起 ETH 转账，违反检查-效果-交互模式，构成经典重入漏洞。",
-        reference: "The DAO 合约源码，函数 splitDAO()，Etherscan 已验证",
+        evidence_type: "code_vulnerability",
+        tx_hash: null,
+        involved_addresses: ["0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"],
+        reasoning:
+          "splitDAO() 函数在扣减发起者余额之前便向外部合约发起 ETH 转账，违反检查-效果-交互（CEI）模式，构成经典重入漏洞；攻击者可在状态更新前反复触发回调函数递归提款。",
+        confidence: 0.99,
       },
       {
-        description: "攻击交易哈希 0x0ec3f2... 的调用栈显示 withdrawRewardFor() 在同一笔交易中被递归调用逾千次。",
-        reference: "链上交易追踪，区块 1,718,497",
+        evidence_type: "on_chain_transaction",
+        tx_hash: "0x0ec3f2488a93839524add10ea229e773f6bc891b4eb4794c3337d4495263790b",
+        involved_addresses: [
+          "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
+          "0x304a554a310C7e546dfe434669C62820b7D83490",
+        ],
+        reasoning:
+          "攻击交易（区块 1,718,497）的调用栈显示 withdrawRewardFor() 在同一笔交易内被递归调用逾千次，是重入攻击的直接链上证据，交易 gas 消耗远超正常水平。",
+        confidence: 0.98,
       },
       {
-        description: "攻击结束时，攻击者子 DAO 地址累计余额约 360 万 ETH，与 The DAO 主合约同期余额减少量完全吻合。",
-        reference: "Etherscan 地址余额历史，2016-06-17",
+        evidence_type: "fund_flow",
+        tx_hash: null,
+        involved_addresses: [
+          "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
+          "0x304a554a310C7e546dfe434669C62820b7D83490",
+        ],
+        reasoning:
+          "攻击结束时，攻击者控制的子 DAO 地址（0x304a...）累计余额约 360 万 ETH，与 The DAO 主合约同期余额减少量完全吻合，资金流向清晰可溯。",
+        confidence: 0.97,
       },
       {
-        description: "The DAO 合约并未设置重入锁（reentrancy guard），在漏洞被利用前亦未通过任何正式安全审计。",
-        reference: "合约字节码分析；Slock.it 项目公告存档",
+        evidence_type: "code_vulnerability",
+        tx_hash: null,
+        involved_addresses: ["0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"],
+        reasoning:
+          "The DAO 合约未设置重入锁（reentrancy guard），且在漏洞被利用前未通过任何正式第三方安全审计，缺乏基本的防御性编程措施与访问控制机制。",
+        confidence: 0.99,
       },
       {
-        description: "以太坊硬分叉在区块 1,920,000 执行，链上记录不可篡改地保留了分叉前后的完整状态，为本次分析提供了充分的历史证据。",
-        reference: "以太坊区块浏览器，区块 1,920,000",
+        evidence_type: "historical_record",
+        tx_hash: null,
+        involved_addresses: [],
+        reasoning:
+          "以太坊在区块 1,920,000 执行硬分叉，回滚被盗资金；拒绝分叉的节点形成以太坊经典（ETC）。链上状态不可篡改地保存了分叉前后的完整历史，为取证分析提供了充分的客观依据。",
+        confidence: 0.99,
       },
     ],
 

@@ -1,0 +1,98 @@
+{
+  "contract_address": "0x5d94309e5a0090b165fa4181519701637b6daeba",
+  "contract_name": "UpgradeBeaconProxy",
+  "simulation_mode": true,
+  "death_cause": "重入攻击（Reentrancy Attack）",
+  "confidence": 0.6,
+  "severity": "high",
+  "evidence": [
+    "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
+    "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+  ],
+  "technical_findings": [
+    {
+      "evidence_type": "code_vulnerability",
+      "tx_hash": null,
+      "involved_addresses": [
+        "0x5d94309e5a0090b165fa4181519701637b6daeba"
+      ],
+      "reasoning": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
+      "confidence": 0.8
+    },
+    {
+      "evidence_type": "code_vulnerability",
+      "tx_hash": null,
+      "involved_addresses": [
+        "0x5d94309e5a0090b165fa4181519701637b6daeba"
+      ],
+      "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
+      "confidence": 0.8
+    },
+    {
+      "evidence_type": "code_vulnerability",
+      "tx_hash": null,
+      "involved_addresses": [
+        "0x5d94309e5a0090b165fa4181519701637b6daeba"
+      ],
+      "reasoning": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。",
+      "confidence": 0.6
+    },
+    {
+      "evidence_type": "historical_record",
+      "tx_hash": null,
+      "involved_addresses": [
+        "0x5d94309e5a0090b165fa4181519701637b6daeba"
+      ],
+      "reasoning": "合约 UpgradeBeaconProxy 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 16493 bytes，满足取证基本要求。",
+      "confidence": 0.99
+    }
+  ],
+  "counter_evidence": [],
+  "all_hypotheses": [
+    {
+      "cause": "重入攻击（Reentrancy Attack）",
+      "confidence": 0.6,
+      "severity": "high",
+      "evidence": [
+        "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
+        "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+      ],
+      "status": "proposed",
+      "refutation_evidence": [],
+      "replaced_by": null,
+      "round_proposed": 1,
+      "round_revised": null,
+      "counter_evidence": []
+    }
+  ],
+  "alternative_hypotheses": [],
+  "code_signals": [
+    {
+      "type": "reentrancy",
+      "severity": "high",
+      "description": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。"
+    },
+    {
+      "type": "delegatecall",
+      "severity": "high",
+      "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+    },
+    {
+      "type": "upgradeable",
+      "severity": "medium",
+      "description": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。"
+    }
+  ],
+  "suspicious_outflows": [],
+  "suspicious_tx_details": [],
+  "timeline": [
+    {
+      "hash": "0x806729d443d0b127ea07c3c9a28298336373643e08f3172ef3cb4869fd3cd19d",
+      "from": "0xd20813c5aef25a62e5e5265eb7b5b07ea0f1466e",
+      "to": "0x5d94309e5a0090b165fa4181519701637b6daeba",
+      "value_wei": 10000000000000,
+      "value_eth": 1e-05,
+      "timeStamp": "1671967559"
+    }
+  ]
+}
