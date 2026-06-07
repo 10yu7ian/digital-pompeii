@@ -1,7 +1,8 @@
 {
   "contract_address": "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4",
   "contract_name": "WalletLibrary",
-  "simulation_mode": true,
+  "simulation_mode": false,
+  "hybrid_mode": true,
   "death_cause": "重入攻击（Reentrancy Attack）",
   "confidence": 0.6,
   "severity": "high",

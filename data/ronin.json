@@ -1,7 +1,8 @@
 {
   "contract_address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
   "contract_name": "Unknown",
-  "simulation_mode": true,
+  "simulation_mode": false,
+  "hybrid_mode": true,
   "death_cause": "大额资金盗取或流动性抽逃（Rug Pull）",
   "confidence": 0.55,
   "severity": "high",
