@@ -2,7 +2,8 @@
   {
     "contract_address": "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
     "contract_name": "DAO",
-    "simulation_mode": true,
+    "simulation_mode": false,
+    "hybrid_mode": true,
     "death_cause": "权限漏洞导致合约被暗中操控（无重入特征性资金流）",
     "confidence": 0.5,
     "severity": "medium",
@@ -108,7 +109,8 @@
   {
     "contract_address": "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4",
     "contract_name": "WalletLibrary",
-    "simulation_mode": true,
+    "simulation_mode": false,
+    "hybrid_mode": true,
     "death_cause": "重入攻击（Reentrancy Attack）",
     "confidence": 0.6,
     "severity": "high",
@@ -229,7 +231,8 @@
   {
     "contract_address": "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5",
     "contract_name": "Diamond",
-    "simulation_mode": true,
+    "simulation_mode": false,
+    "hybrid_mode": true,
     "death_cause": "重入攻击（Reentrancy Attack）",
     "confidence": 0.6,
     "severity": "high",
@@ -368,7 +371,8 @@
   {
     "contract_address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
     "contract_name": "Unknown",
-    "simulation_mode": true,
+    "simulation_mode": false,
+    "hybrid_mode": true,
     "death_cause": "大额资金盗取或流动性抽逃（Rug Pull）",
     "confidence": 0.55,
     "severity": "high",
@@ -511,7 +515,8 @@
   {
     "contract_address": "0x5d94309e5a0090b165fa4181519701637b6daeba",
     "contract_name": "UpgradeBeaconProxy",
-    "simulation_mode": true,
+    "simulation_mode": false,
+    "hybrid_mode": true,
     "death_cause": "重入攻击（Reentrancy Attack）",
     "confidence": 0.6,
     "severity": "high",

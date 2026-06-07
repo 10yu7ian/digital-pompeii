@@ -2,19 +2,21 @@
 Digital Pompeii — Coroner Agent
 链上验尸 Agent，tool-calling 循环框架。
 
-推理模式通过模块顶部 SIMULATION_MODE 控制：
-  True  → SimulationPlanner 按确定性顺序决策，推理用规则引擎
+推理模式通过模块顶部 HYBRID_MODE 控制：
+  True  → 真实 Etherscan 工具调用 + 本地规则推理
   False → 调用 OpenAI 兼容接口，由 LLM 自主决定工具调用顺序
 """
 
 import datetime
 import json
 import os
+import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from dotenv import load_dotenv
+from openai import OpenAI
 
 
 # ---------------------------------------------------------------------------
@@ -26,12 +28,20 @@ RUNS_DIR = PROJECT_ROOT / "runs"
 ETHERSCAN_API_URL = "https://api.etherscan.io/v2/api"
 ETHEREUM_CHAIN_ID = 1
 DEFAULT_TX_LIMIT = 10
-MAX_ROUNDS = 10                         # 工具调用最大轮次，防止死循环
+MAX_ROUNDS = 5                          # 工具调用最大轮次，防止死循环和 API 限流
 MAX_TX_DETAILS = 2                      # 每次调查最多深查几笔交易详情
 LARGE_VALUE_THRESHOLD_WEI = 1 * 10**18 # 可疑大额阈值（默认 1 ETH）
 
-# 调查推理模式
-SIMULATION_MODE: bool = True
+# 调查推理模式。当前唯一活跃模式为 HYBRID_MODE。
+SIMULATION_MODE: bool = False
+HYBRID_MODE: bool = True
+
+# GLM API 配置
+GLM_MODEL = "glm-4.7-flash"
+GLM_BASE_URL = "https://api.z.ai/api/paas/v4/"
+GLM_TIMEOUT_SECONDS = 60
+GLM_RATE_LIMIT_COOLDOWN_SECONDS = 3
+AI_JSON_REPAIR_ATTEMPTS = 1
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -46,6 +56,18 @@ class InvestigationError(RuntimeError):
     def __init__(self, message: str, error_type: str = "unknown") -> None:
         super().__init__(message)
         self.error_type = error_type
+
+
+def _log_status(message: str) -> None:
+    """打印带时间戳的运行状态日志，不受 verbose 开关影响。"""
+    timestamp = datetime.datetime.now().isoformat(timespec="seconds")
+    print(f"[{timestamp}] {message}")
+
+
+def _wait_for_api_rate_limit_cooldown() -> None:
+    """GLM API 调用前后的限流冷却等待。"""
+    _log_status(f"等待 API 限流冷却：{GLM_RATE_LIMIT_COOLDOWN_SECONDS}s")
+    time.sleep(GLM_RATE_LIMIT_COOLDOWN_SECONDS)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +155,8 @@ def _get_etherscan_api_key() -> str:
 
 
 def _request_etherscan(params: Dict[str, Any]) -> Any:
+    action = params.get("action", "unknown")
+    _log_status(f"Etherscan API 调用开始：action={action}")
     try:
         response = requests.get(
             ETHERSCAN_API_URL,
@@ -141,16 +165,19 @@ def _request_etherscan(params: Dict[str, Any]) -> Any:
         )
         response.raise_for_status()
     except requests.Timeout as exc:
+        _log_status(f"Etherscan API 调用失败：action={action}, error=timeout")
         raise InvestigationError(
             f"Etherscan API 请求超时（20s）：{params.get('action', '')}",
             error_type="api_timeout",
         ) from exc
     except requests.ConnectionError as exc:
+        _log_status(f"Etherscan API 调用失败：action={action}, error=connection")
         raise InvestigationError(
             f"网络连接失败，请检查网络后重试：{exc}",
             error_type="network_error",
         ) from exc
     except requests.HTTPError as exc:
+        _log_status(f"Etherscan API 调用失败：action={action}, error=http")
         raise InvestigationError(
             f"Etherscan HTTP 错误：{exc}",
             error_type="api_http_error",
@@ -161,10 +188,12 @@ def _request_etherscan(params: Dict[str, Any]) -> Any:
     message = payload.get("message")
     result = payload.get("result")
     if status == "0" and isinstance(result, str) and "No transactions found" not in result:
+        _log_status(f"Etherscan API 调用失败：action={action}, message={message}")
         raise InvestigationError(
             f"Etherscan API 业务错误：{message} — {result}",
             error_type="api_error",
         )
+    _log_status(f"Etherscan API 调用完成：action={action}, status={status}, message={message}")
     return result
 
 
@@ -291,7 +320,7 @@ def execute_tool(tool_name: str, tool_args: Dict[str, Any]) -> Any:
 
 
 # ---------------------------------------------------------------------------
-# Analysis helpers（规则引擎，SIMULATION_MODE=True 时使用）
+# Analysis helpers（本地规则引擎，HYBRID_MODE/SIMULATION_MODE 使用）
 # ---------------------------------------------------------------------------
 
 def _sim_code_signals(source_code: str) -> List[Dict[str, Any]]:
@@ -467,45 +496,103 @@ def _sim_counter_evidence(
 
 
 # ---------------------------------------------------------------------------
-# AI 推理接口（SIMULATION_MODE=False 时调用）
+# AI 推理接口（HYBRID_MODE=False 且 SIMULATION_MODE=False 时调用）
 # ---------------------------------------------------------------------------
 
-def _ai_call(system_prompt: str, user_prompt: str) -> str:
-    """调用 OpenAI 兼容接口，返回模型回复文本。"""
-    api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AI_API_KEY")
+def _get_glm_client() -> OpenAI:
+    """构造 GLM API 客户端，读取 ZAI_API_KEY 环境变量。"""
+    api_key = os.getenv("ZAI_API_KEY")
     if not api_key:
-        raise RuntimeError("SIMULATION_MODE=False 时需要设置 OPENAI_API_KEY 或 AI_API_KEY。")
-    base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-    model = os.getenv("AI_MODEL", "gpt-4o")
-    response = requests.post(
-        f"{base_url}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json={
-            "model": model,
-            "messages": [
+        raise RuntimeError("SIMULATION_MODE=False 时需要设置 ZAI_API_KEY 环境变量。")
+    return OpenAI(api_key=api_key, base_url=GLM_BASE_URL, timeout=GLM_TIMEOUT_SECONDS)
+
+
+def _ai_call(system_prompt: str, user_prompt: str) -> str:
+    """调用 GLM API，返回模型回复文本。"""
+    client = _get_glm_client()
+    _wait_for_api_rate_limit_cooldown()
+    _log_status(f"GLM API 调用开始：model={GLM_MODEL}, mode=completion")
+    try:
+        response = client.chat.completions.create(
+            model=GLM_MODEL,
+            messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
             ],
-            "temperature": 0.2,
-        },
-        timeout=60,
-    )
-    response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+            temperature=0.2,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _log_status(f"GLM API 调用失败：mode=completion, error={exc}")
+        raise
+    finally:
+        _wait_for_api_rate_limit_cooldown()
+    _log_status("GLM API 调用完成：mode=completion")
+    return response.choices[0].message.content or ""
+
+
+def _extract_json_fragment(text: str) -> str:
+    """从模型回复中提取第一个 JSON 对象或数组，兼容 Markdown 代码块。"""
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+
+    decoder = json.JSONDecoder()
+    for idx, char in enumerate(stripped):
+        if char not in "[{":
+            continue
+        try:
+            _, end = decoder.raw_decode(stripped[idx:])
+        except json.JSONDecodeError:
+            continue
+        return stripped[idx:idx + end]
+    return stripped
+
+
+def _ai_json_call(system_prompt: str, user_prompt: str, expected_shape: str) -> Any:
+    """调用 GLM 并解析 JSON；失败时让模型自我纠错一次。"""
+    reply = _ai_call(system_prompt, user_prompt)
+    last_error = ""
+    for attempt in range(AI_JSON_REPAIR_ATTEMPTS + 1):
+        try:
+            return json.loads(_extract_json_fragment(reply))
+        except json.JSONDecodeError as exc:
+            last_error = str(exc)
+            if attempt >= AI_JSON_REPAIR_ATTEMPTS:
+                raise
+            reply = _ai_call(
+                system_prompt=(
+                    "你是严格的 JSON 修复器。只输出合法 JSON，不要输出解释、Markdown 或代码块。"
+                ),
+                user_prompt=(
+                    f"目标结构：{expected_shape}\n"
+                    f"解析错误：{last_error}\n"
+                    f"请修复下面内容为合法 JSON：\n{reply}"
+                ),
+            )
+
+    raise json.JSONDecodeError(last_error, reply, 0)
 
 
 def _ai_code_signals(source_code: str, contract_name: str) -> List[Dict[str, Any]]:
-    reply = _ai_call(
-        system_prompt=(
-            "你是智能合约安全审计专家。分析 Solidity 源码，"
-            "以 JSON 数组形式返回风险信号，每项含 type/severity/description。"
-            "severity 只能是 critical/high/medium/low。仅返回 JSON 数组。"
-        ),
-        user_prompt=f"合约：{contract_name}\n\n```solidity\n{source_code[:8000]}\n```",
+    system_prompt = (
+        "你是智能合约安全审计专家。分析 Solidity 源码，"
+        "以 JSON 数组形式返回风险信号，每项含 type/severity/description。"
+        "severity 只能是 critical/high/medium/low。仅返回 JSON 数组。"
     )
+    user_prompt = f"合约：{contract_name}\n\n```solidity\n{source_code[:8000]}\n```"
     try:
-        return json.loads(reply)
+        data = _ai_json_call(system_prompt, user_prompt, "JSON 数组：[{type,severity,description}]")
+        return data if isinstance(data, list) else []
     except json.JSONDecodeError:
+        reply = _ai_call(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+        )
         return [{"type": "ai_raw", "severity": "unknown", "description": reply}]
 
 
@@ -519,16 +606,16 @@ def _ai_generate_hypotheses(
         {"code_signals": code_signals, "fund_flow": fund_result, "tx_details": tx_detail_findings},
         ensure_ascii=False,
     )
-    reply = _ai_call(
-        system_prompt=(
-            "你是链上事故调查专家。根据提供的数据以 JSON 数组形式返回候选死因假设，"
-            "每项含 cause/confidence/severity/evidence。仅返回 JSON 数组。"
-        ),
-        user_prompt=f"合约：{contract_name}\n\n数据：{context}",
+    system_prompt = (
+        "你是链上事故调查专家。根据提供的数据以 JSON 数组形式返回候选死因假设，"
+        "每项含 cause/confidence/severity/evidence。仅返回 JSON 数组。"
     )
+    user_prompt = f"合约：{contract_name}\n\n数据：{context}"
     try:
-        return json.loads(reply)
+        data = _ai_json_call(system_prompt, user_prompt, "JSON 数组：[{cause,confidence,severity,evidence}]")
+        return data if isinstance(data, list) else []
     except json.JSONDecodeError:
+        reply = _ai_call(system_prompt=system_prompt, user_prompt=user_prompt)
         return [{"cause": reply, "confidence": 0.5, "severity": "unknown", "evidence": []}]
 
 
@@ -543,16 +630,16 @@ def _ai_counter_evidence(
          "recent_tx_count": len(transactions)},
         ensure_ascii=False,
     )
-    reply = _ai_call(
-        system_prompt=(
-            "你是链上事故调查专家。寻找能推翻或削弱当前假设的反证，"
-            "以 JSON 字符串数组形式返回。仅返回 JSON 数组。"
-        ),
-        user_prompt=f"合约：{contract_name}\n\n数据：{context}",
+    system_prompt = (
+        "你是链上事故调查专家。寻找能推翻或削弱当前假设的反证，"
+        "以 JSON 字符串数组形式返回。仅返回 JSON 数组。"
     )
+    user_prompt = f"合约：{contract_name}\n\n数据：{context}"
     try:
-        return json.loads(reply)
+        data = _ai_json_call(system_prompt, user_prompt, "JSON 字符串数组")
+        return data if isinstance(data, list) else []
     except json.JSONDecodeError:
+        reply = _ai_call(system_prompt=system_prompt, user_prompt=user_prompt)
         return [reply]
 
 
@@ -1051,9 +1138,11 @@ class CoronerAgent:
     def __init__(
         self,
         simulation_mode: bool = SIMULATION_MODE,
+        hybrid_mode: bool = HYBRID_MODE,
         verbose: bool = False,
     ) -> None:
         self.simulation_mode = simulation_mode
+        self.hybrid_mode = hybrid_mode
         self.verbose = verbose
         # 累积调查状态（被工具结果持续填充）
         self.state: Dict[str, Any] = {
@@ -1080,18 +1169,26 @@ class CoronerAgent:
         self.state["contract_address"] = contract_address
         self._setup_messages(contract_address)
 
-        mode_label = "SIMULATION（规则引擎）" if self.simulation_mode else "AI（OpenAI 兼容）"
+        if self.hybrid_mode:
+            mode_label = "HYBRID（真实 Etherscan + 本地规则）"
+        elif self.simulation_mode:
+            mode_label = "SIMULATION（规则引擎）"
+        else:
+            mode_label = f"AI（{GLM_MODEL}）"
         self._banner(f"Digital Pompeii — Coroner Agent\n  合约：{contract_address}\n  模式：{mode_label}")
 
-        planner = SimulationPlanner(contract_address) if self.simulation_mode else None
+        local_reasoning = self.hybrid_mode or self.simulation_mode
+        planner = SimulationPlanner(contract_address) if local_reasoning else None
         self._planner = planner
         logger = RunLogger(contract_address)
 
         # ── Tool-calling 主循环 ──────────────────────────────────────
+        _log_status(f"开始调查：contract_address={contract_address}, mode={mode_label}")
         for round_num in range(1, MAX_ROUNDS + 1):
+            _log_status(f"第 {round_num} 轮循环开始")
             self._print_round(round_num)
 
-            if self.simulation_mode:
+            if local_reasoning:
                 action = planner.next_action(self.state)  # type: ignore[union-attr]
             else:
                 action = self._ai_get_next_action()
@@ -1108,26 +1205,30 @@ class CoronerAgent:
             tool_args: Dict[str, Any] = action["args"]
 
             self._log("工具调用", f"{tool_name}({json.dumps(tool_args, ensure_ascii=False)})")
+            _log_status(
+                f"准备调用工具：{tool_name} 参数={json.dumps(tool_args, ensure_ascii=False)}"
+            )
             result = execute_tool(tool_name, tool_args)
             self._update_state(tool_name, tool_args, result)
             self._print_tool_result(tool_name, result)
 
             logger.log_tool_call(round_num, tool_name, tool_args, result, reasoning)
 
-            # ── 假设评估（SIMULATION_MODE 下，每轮工具调用后评估证据）──
-            if self.simulation_mode and planner is not None:
+            # ── 假设评估（本地规则模式下，每轮工具调用后评估证据）──
+            if local_reasoning and planner is not None:
                 hyp_events = planner.evaluate_evidence(self.state, round_num)
                 if hyp_events:
                     logger.log_hypothesis_events(round_num, hyp_events)
                     self._print_hypothesis_events(hyp_events)
 
-            if not self.simulation_mode:
+            if not local_reasoning:
                 self._add_tool_result_to_messages(action, result)
         else:
             self._log("警告", f"已达到最大轮次上限（{MAX_ROUNDS}），强制进入综合分析")
 
         # ── 综合分析 ─────────────────────────────────────────────────
         self._banner("综合分析（Synthesis）")
+        _log_status("正在生成报告")
         exhibit = self.synthesize_exhibit()
         logger.log_synthesis(exhibit)
 
@@ -1135,6 +1236,7 @@ class CoronerAgent:
         if output_path:
             out = Path(output_path)
             out.parent.mkdir(parents=True, exist_ok=True)
+            _log_status(f"写入 JSON 报告：{out}")
             out.write_text(json.dumps(exhibit, ensure_ascii=False, indent=2), encoding="utf-8")
             print(f"\n[OK] 展品已保存：{out.resolve()}")
 
@@ -1166,9 +1268,8 @@ class CoronerAgent:
             self._save_and_log_incomplete(exhibit, output_path, "unknown", str(exc))
             return exhibit
 
-    @staticmethod
     def _incomplete_exhibit(
-        contract_address: str, error_type: str, error_message: str
+        self, contract_address: str, error_type: str, error_message: str
     ) -> Dict[str, Any]:
         """生成"调查未完成"的标准展品 JSON。"""
         return {
@@ -1178,7 +1279,8 @@ class CoronerAgent:
             "error_message": error_message,
             "timestamp": datetime.datetime.now().isoformat(),
             "contract_name": None,
-            "simulation_mode": SIMULATION_MODE,
+            "simulation_mode": self.simulation_mode,
+            "hybrid_mode": self.hybrid_mode,
             "death_cause": None,
             "confidence": None,
             "severity": None,
@@ -1240,7 +1342,7 @@ class CoronerAgent:
 
         # ① 代码信号
         self._log("分析", "扫描代码风险信号")
-        if self.simulation_mode:
+        if self.hybrid_mode or self.simulation_mode:
             code_signals = _sim_code_signals(source_code)
         else:
             code_signals = _ai_code_signals(source_code, contract_name)
@@ -1268,7 +1370,7 @@ class CoronerAgent:
                     })
 
         # ④ 假设生成
-        #    SIMULATION_MODE: 优先使用 planner 在工具调用过程中已动态维护的假设；
+        #    HYBRID/SIMULATION: 优先使用 planner 在工具调用过程中已动态维护的假设；
         #    AI MODE / 无 planner: 在综合阶段一次性生成。
         self._log("分析", "整合候选死因假设")
 
@@ -1279,14 +1381,14 @@ class CoronerAgent:
             self._planner.alternative_hypotheses if self._planner else []
         )
 
-        if self.simulation_mode and planner_active:
+        if (self.hybrid_mode or self.simulation_mode) and planner_active:
             # 直接使用 planner 动态维护的假设（已在工具调用过程中持续修正）
             hypotheses = planner_active
             alternative_hypotheses = planner_alternatives
-            self._log("来源", "来自 SimulationPlanner 动态假设追踪")
+            self._log("来源", "来自本地规则 Planner 动态假设追踪")
         else:
             # AI 模式或 planner 为空：综合阶段一次性生成
-            if self.simulation_mode:
+            if self.hybrid_mode or self.simulation_mode:
                 hypotheses = _sim_generate_hypotheses(code_signals, fund_result, tx_detail_findings)
             else:
                 hypotheses = _ai_generate_hypotheses(code_signals, fund_result, tx_detail_findings, contract_name)
@@ -1308,7 +1410,7 @@ class CoronerAgent:
 
         # ⑤ 反证搜索
         self._log("分析", "搜索反证")
-        if self.simulation_mode:
+        if self.hybrid_mode or self.simulation_mode:
             counter_evidence = _sim_counter_evidence(verified, len(transactions), code_signals)
         else:
             counter_evidence = _ai_counter_evidence(hypotheses, code_signals, transactions, contract_name)
@@ -1338,6 +1440,7 @@ class CoronerAgent:
             "contract_address": self.state["contract_address"],
             "contract_name": contract_name,
             "simulation_mode": self.simulation_mode,
+            "hybrid_mode": self.hybrid_mode,
             "death_cause": primary["cause"] if primary else "无法确定",
             "confidence": primary["confidence"] if primary else 0.0,
             "severity": primary.get("severity") if primary else None,
@@ -1461,40 +1564,45 @@ class CoronerAgent:
         ]
 
     def _ai_get_next_action(self) -> Dict[str, Any]:
-        """调用 OpenAI 兼容接口（带 tool_schemas），解析返回的工具调用或结案决定。"""
-        api_key = os.getenv("OPENAI_API_KEY") or os.getenv("AI_API_KEY")
-        if not api_key:
-            raise RuntimeError("SIMULATION_MODE=False 时需要设置 OPENAI_API_KEY 或 AI_API_KEY。")
-        base_url = os.getenv("OPENAI_API_BASE", "https://api.openai.com/v1")
-        model = os.getenv("AI_MODEL", "gpt-4o")
+        """调用 GLM API（带 tool_schemas），解析返回的工具调用或结案决定。"""
+        client = _get_glm_client()
+        _wait_for_api_rate_limit_cooldown()
+        _log_status(f"GLM API 调用开始：model={GLM_MODEL}, mode=tool_calling")
+        try:
+            response = client.chat.completions.create(
+                model=GLM_MODEL,
+                messages=self._messages,
+                tools=TOOL_SCHEMAS,
+                tool_choice="auto",
+                temperature=0.1,
+            )
+        except Exception as exc:  # noqa: BLE001
+            _log_status(f"GLM API 调用失败：mode=tool_calling, error={exc}")
+            raise
+        finally:
+            _wait_for_api_rate_limit_cooldown()
+        choice = response.choices[0]
+        _log_status(f"GLM API 调用完成：mode=tool_calling, finish_reason={choice.finish_reason}")
+        message = choice.message
+        # 将 assistant 消息追加到对话历史（转为 dict 以便序列化）
+        self._messages.append(message.model_dump(exclude_unset=False))
 
-        response = requests.post(
-            f"{base_url}/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "model": model,
-                "messages": self._messages,
-                "tools": TOOL_SCHEMAS,
-                "tool_choice": "auto",
-                "temperature": 0.1,
-            },
-            timeout=60,
-        )
-        response.raise_for_status()
-        resp_json = response.json()
-        choice = resp_json["choices"][0]
-        message = choice["message"]
-        self._messages.append(message)
-
-        if choice.get("finish_reason") == "tool_calls" and message.get("tool_calls"):
-            tc = message["tool_calls"][0]
+        if choice.finish_reason == "tool_calls" and message.tool_calls:
+            tc = message.tool_calls[0]
+            try:
+                tool_args = json.loads(tc.function.arguments)
+            except json.JSONDecodeError as exc:
+                raise InvestigationError(
+                    f"GLM 返回的工具参数不是合法 JSON：{tc.function.arguments}",
+                    error_type="llm_tool_args_error",
+                ) from exc
             return {
                 "type": "tool_call",
-                "tool": tc["function"]["name"],
-                "args": json.loads(tc["function"]["arguments"]),
-                "tool_call_id": tc["id"],
+                "tool": tc.function.name,
+                "args": tool_args,
+                "tool_call_id": tc.id,
             }
-        return {"type": "final_output", "content": message.get("content", "")}
+        return {"type": "final_output", "content": message.content or ""}
 
     def _add_tool_result_to_messages(self, action: Dict[str, Any], result: Any) -> None:
         result_str = json.dumps(result, ensure_ascii=False)

@@ -1,7 +1,8 @@
 {
   "contract_address": "0x5d94309e5a0090b165fa4181519701637b6daeba",
   "contract_name": "UpgradeBeaconProxy",
-  "simulation_mode": true,
+  "simulation_mode": false,
+  "hybrid_mode": true,
   "death_cause": "重入攻击（Reentrancy Attack）",
   "confidence": 0.6,
   "severity": "high",
