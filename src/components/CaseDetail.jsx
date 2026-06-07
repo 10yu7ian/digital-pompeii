@@ -20,6 +20,33 @@ function verdictClass(verdict) {
   return "bg-zinc-500/20 text-zinc-300 ring-1 ring-zinc-400/30";
 }
 
+const EVIDENCE_TYPE_META = {
+  code_vulnerability:   { label: "代码漏洞",   color: "bg-red-500/20 text-red-300 ring-1 ring-red-400/30" },
+  on_chain_transaction: { label: "链上交易",   color: "bg-sky-500/20 text-sky-300 ring-1 ring-sky-400/30" },
+  fund_flow:            { label: "资金流向",   color: "bg-violet-500/20 text-violet-300 ring-1 ring-violet-400/30" },
+  historical_record:    { label: "历史记录",   color: "bg-amber-500/20 text-amber-300 ring-1 ring-amber-400/30" },
+};
+
+function EvidenceTypeBadge({ type }) {
+  const meta = EVIDENCE_TYPE_META[type] ?? { label: type ?? "未知类型", color: "bg-zinc-500/20 text-zinc-300 ring-1 ring-zinc-400/30" };
+  return (
+    <span className={`rounded-full px-3 py-1 text-xs font-medium ${meta.color}`}>
+      {meta.label}
+    </span>
+  );
+}
+
+function ConfidencePill({ value }) {
+  if (typeof value !== "number") return null;
+  const pct = Math.round(Math.max(0, Math.min(value, 1)) * 100);
+  const color = pct >= 90 ? "text-emerald-300" : pct >= 70 ? "text-sky-300" : pct >= 50 ? "text-amber-300" : "text-red-300";
+  return (
+    <span className={`text-xs font-mono ${color}`}>
+      置信度 {pct}%
+    </span>
+  );
+}
+
 export default function CaseDetail({ caseData = demoCase }) {
   if (!caseData) {
     return (
@@ -33,7 +60,9 @@ export default function CaseDetail({ caseData = demoCase }) {
 
   const confidence = formatConfidence(caseData.confidence);
   const timeline = Array.isArray(caseData.timeline) ? caseData.timeline : [];
-  const evidence = Array.isArray(caseData.evidence) ? caseData.evidence : [];
+  const findings = Array.isArray(caseData.technical_findings)
+    ? caseData.technical_findings
+    : [];
   const alternatives = Array.isArray(caseData.alternative_hypotheses)
     ? caseData.alternative_hypotheses
     : [];
@@ -94,20 +123,58 @@ export default function CaseDetail({ caseData = demoCase }) {
         </article>
 
         <article className="rounded-2xl border border-zinc-700 bg-zinc-900/70 p-6">
-          <h2 className="text-xl font-semibold text-zinc-100">证据</h2>
+          <h2 className="text-xl font-semibold text-zinc-100">取证发现</h2>
           <ul className="mt-5 space-y-4">
-            {evidence.map((item, index) => (
+            {findings.map((item, index) => (
               <li
-                key={`${item.reference ?? "evidence"}-${index}`}
-                className="rounded-xl border border-zinc-800 bg-black/30 p-4"
+                key={`finding-${index}`}
+                className="rounded-xl border border-zinc-800 bg-black/30 p-4 space-y-3"
               >
-                <p className="text-zinc-200">{item.description ?? "暂无证据描述"}</p>
-                <p className="mt-2 text-sm text-zinc-400">
-                  证据来源：{item.reference ?? "未标注"}
-                </p>
+                {/* 顶栏：类型标签 + 置信度 */}
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <EvidenceTypeBadge type={item.evidence_type} />
+                  <ConfidencePill value={item.confidence} />
+                </div>
+
+                {/* 推理说明 */}
+                <p className="leading-7 text-zinc-200">{item.reasoning ?? "暂无说明"}</p>
+
+                {/* 关联交易哈希 */}
+                {item.tx_hash && (
+                  <p className="font-mono text-xs text-zinc-400 break-all">
+                    <span className="mr-2 text-zinc-500">tx</span>
+                    <a
+                      href={`https://etherscan.io/tx/${item.tx_hash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sky-400 underline-offset-2 hover:underline"
+                    >
+                      {item.tx_hash}
+                    </a>
+                  </p>
+                )}
+
+                {/* 相关地址 */}
+                {Array.isArray(item.involved_addresses) && item.involved_addresses.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {item.involved_addresses.map((addr) => (
+                      <a
+                        key={addr}
+                        href={`https://etherscan.io/address/${addr}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-mono text-xs text-zinc-400 bg-zinc-800 rounded px-2 py-0.5 hover:text-sky-300 transition-colors"
+                      >
+                        {addr.slice(0, 10)}…{addr.slice(-6)}
+                      </a>
+                    ))}
+                  </div>
+                )}
               </li>
             ))}
-            {evidence.length === 0 && <li className="text-zinc-400">暂无证据数据。</li>}
+            {findings.length === 0 && (
+              <li className="text-zinc-400">暂无取证数据。</li>
+            )}
           </ul>
         </article>
 
