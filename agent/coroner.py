@@ -1961,6 +1961,7 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
 
     单地址模式（默认）：
       coroner.py <address> [-o output.json]
+      coroner.py --address <address> [--mode ai|hybrid|simulation]
 
     批量模式：
       coroner.py --batch <addr1> <addr2> ... [-o output_dir/]
@@ -1969,6 +1970,7 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
     通用选项：
       --quiet / -q     关闭 verbose 输出（批量模式默认安静）
       --output / -o    单地址时为文件路径；批量时为输出目录
+      --mode           推理模式：ai（默认）、hybrid、simulation
     """
     cfg: Dict[str, Any] = {
         "mode": "single",
@@ -1976,6 +1978,7 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
         "output": None,
         "verbose": True,
         "batch_file": None,
+        "run_mode": "ai",   # ai | hybrid | simulation
     }
 
     i = 0
@@ -1999,6 +2002,12 @@ def _parse_args(argv: List[str]) -> Dict[str, Any]:
         elif arg in ("--quiet", "-q"):
             cfg["verbose"] = False
             i += 1
+        elif arg in ("--address", "-a") and i + 1 < len(argv):
+            cfg["addresses"].append(argv[i + 1])
+            i += 2
+        elif arg == "--mode" and i + 1 < len(argv):
+            cfg["run_mode"] = argv[i + 1].lower()
+            i += 2
         elif not arg.startswith("-"):
             cfg["addresses"].append(arg)
             i += 1
@@ -2099,8 +2108,11 @@ def main() -> None:
     address = cfg["addresses"][0] if cfg["addresses"] else "0x0000000000000000000000000000000000000000"
     output_path: Optional[str] = cfg["output"]
     verbose: bool = cfg["verbose"]
+    run_mode: str = cfg["run_mode"]
 
-    agent = CoronerAgent(verbose=verbose)
+    hybrid = run_mode == "hybrid"
+    simulation = run_mode == "simulation"
+    agent = CoronerAgent(verbose=verbose, hybrid_mode=hybrid, simulation_mode=simulation)
     exhibit = agent.run_investigation_safe(address, output_path=output_path)
 
     print("\n" + "=" * 62)

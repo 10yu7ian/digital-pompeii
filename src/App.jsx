@@ -5,6 +5,7 @@ import Landing from "./components/Landing";
 import CaseCard from "./components/CaseCard";
 import CaseDetail from "./components/CaseDetail";
 import AgentConsole from "./components/AgentConsole";
+import HealthCheck from "./components/HealthCheck";
 import "./App.css";
 
 const TABS = [
@@ -13,11 +14,18 @@ const TABS = [
 ];
 
 export default function App() {
-  const [entered, setEntered] = useState(false);
-  const [activeId, setActiveId] = useState(cases[0]?.id ?? null);
+  const [entered,   setEntered]   = useState(false);
+  const [checking,  setChecking]  = useState(false);
+  const [activeId,  setActiveId]  = useState(cases[0]?.id ?? null);
 
   const handleEnter = (id) => {
     if (id) setActiveId(id);
+    setEntered(true);
+  };
+
+  const handleOpenCase = (id) => {
+    if (id) setActiveId(id);
+    setChecking(false);
     setEntered(true);
   };
   const [activeTab, setActiveTab] = useState("exhibit");
@@ -33,13 +41,26 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#060608] text-[#e8e4dc]">
       <AnimatePresence mode="wait">
-        {!entered ? (
+        {checking ? (
+          <motion.div
+            key="healthcheck"
+            initial={{ opacity: 0, filter: "blur(8px)" }}
+            animate={{ opacity: 1, filter: "blur(0px)" }}
+            exit={{ opacity: 0, filter: "blur(8px)" }}
+            transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <HealthCheck
+              onBack={() => setChecking(false)}
+              onOpenCase={handleOpenCase}
+            />
+          </motion.div>
+        ) : !entered ? (
           <motion.div
             key="landing"
             exit={{ opacity: 0, scale: 1.02, filter: "blur(12px)" }}
             transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
           >
-            <Landing onEnter={handleEnter} />
+            <Landing onEnter={handleEnter} onCheck={() => setChecking(true)} />
           </motion.div>
         ) : (
           <motion.div

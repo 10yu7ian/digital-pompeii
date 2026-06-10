@@ -94,7 +94,7 @@ function StoneCard({ caseData, index, onSelect }) {
   );
 }
 
-export default function Landing({ onEnter }) {
+export default function Landing({ onEnter, onCheck }) {
   const [statsOn, setStatsOn] = useState(false);
   const loss = useCountUp(2_100_000_000, 2600, statsOn);
 
@@ -301,8 +301,48 @@ export default function Landing({ onEnter }) {
         initial={{ opacity: 0, y: 40 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 3.4, duration: 1.2, ease: OUT_EXPO }}
-        className="relative z-10 w-full max-w-3xl mx-auto px-6 pb-24 grid md:grid-cols-2 gap-4 mt-6"
+        className="relative z-10 w-full max-w-3xl mx-auto px-6 pb-24 flex flex-col gap-4 mt-6"
       >
+        {/* 入坑体检 — 可点击 */}
+        <motion.button
+          onClick={onCheck}
+          whileHover={{ scale: 1.01, y: -2 }}
+          whileTap={{ scale: 0.99 }}
+          className="rounded-2xl p-5 flex items-center justify-between gap-4 w-full text-left group"
+          style={{
+            background: "linear-gradient(135deg, rgba(52,211,153,0.07), rgba(16,185,129,0.03))",
+            border: "1px solid rgba(52,211,153,0.18)",
+            boxShadow: "0 0 40px rgba(52,211,153,0.04)",
+          }}
+        >
+          <div className="flex flex-col gap-1.5">
+            <div className="flex items-center gap-3">
+              <span className="font-mono-plex text-[11px] tracking-[0.28em] uppercase" style={{ color: "rgba(52,211,153,0.6)" }}>
+                现已上线 · Live
+              </span>
+              <span className="font-mono-plex text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(52,211,153,0.1)", color: "rgba(52,211,153,0.7)", border: "1px solid rgba(52,211,153,0.2)" }}>
+                Web2 友好
+              </span>
+            </div>
+            <p className="font-playfair text-[19px]" style={{ color: "rgba(180,255,220,0.8)" }}>
+              入坑前，先体检
+            </p>
+            <p className="font-mono-plex text-[11px] tracking-wider" style={{ color: "rgba(52,211,153,0.55)" }}>
+              Project Health Check · AI Risk Screening
+            </p>
+            <p className="text-[13px] leading-relaxed mt-1" style={{ color: "rgba(180,220,200,0.62)" }}>
+              粘贴任意合约地址，AI 验尸官替你排查风险，用人话告诉你该不该入。
+            </p>
+          </div>
+          <div
+            className="shrink-0 w-10 h-10 rounded-full flex items-center justify-center transition-transform group-hover:translate-x-1"
+            style={{ background: "rgba(52,211,153,0.12)", border: "1px solid rgba(52,211,153,0.25)", color: "rgba(52,211,153,0.8)", fontSize: "18px" }}
+          >
+            →
+          </div>
+        </motion.button>
+
+        <div className="grid md:grid-cols-2 gap-4">
         {/* 防猝死指数 */}
         <div
           className="rounded-2xl p-5 flex flex-col gap-3 cursor-not-allowed select-none"
@@ -380,6 +420,7 @@ export default function Landing({ onEnter }) {
               </span>
             </div>
           </div>
+        </div>
         </div>
       </motion.div>
 
