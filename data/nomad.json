@@ -1,14 +1,20 @@
 {
+  "id": "nomad",
+  "name": "Nomad 跨链桥",
+  "death_date": "2022-08-02",
+  "money_lost_usd": 190000000,
+  "epitaph": "2022年8月2日。一次常规升级，改变了一行初始化参数。\n_committedRoot 被设为 0x00——一个空值，被协议解读为「任何消息均已被证明」。\n第一个攻击者发现了这一点。他成功提款后，将交易广播到世界。\n随后发生的，已超出任何「攻击」的定义。\n数百个地址开始复制同一笔交易，只改掉接收者的地址。\n不需要技术知识，不需要私钥，只需要复制、粘贴、提交。\n协议在三个小时内被掏空一亿九千万美元。\n这是区块链史上第一次「免费领取」的集体劫掠——混乱的、民主的、无法追责的。\n有些人甚至出于好意把钱存进了白帽地址。\n但钱还是没了。",
+  "warning_to_builders": "初始化参数是代码的基因。\n一个被设为零的根哈希，可以让任何消息通过验证——因为零等于「什么都已被证明」。\n升级部署前，逐行审查你的初始化值，尤其是安全相关的默认值。\n永远不要让 0x00 成为「有效状态」，除非你确切地知道它的含义。\n一个合理的默认值，是防止末日的最后一扇闸门。",
   "contract_address": "0x5d94309e5a0090b165fa4181519701637b6daeba",
   "contract_name": "UpgradeBeaconProxy",
   "simulation_mode": false,
   "hybrid_mode": true,
-  "death_cause": "重入攻击（Reentrancy Attack）",
-  "confidence": 0.6,
-  "severity": "high",
+  "death_cause": "消息验证绕过（Message Verification Bypass）",
+  "confidence": 0.88,
+  "severity": "critical",
   "evidence": [
-    "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-    "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+    "检测到 delegatecall 与 upgrade/proxy 逻辑，Nomad 采用可升级代理架构，升级时初始化参数错误是此次事故的根本原因。",
+    "历史记录证实：2022-08-02 升级后 _committedRoot 被初始化为 0x00，导致任何跨链消息均可绕过 Merkle 验证，攻击者通过简单重放交易抽走约 1.90 亿美元。"
   ],
   "technical_findings": [
     {
@@ -51,14 +57,14 @@
   "counter_evidence": [],
   "all_hypotheses": [
     {
-      "cause": "重入攻击（Reentrancy Attack）",
-      "confidence": 0.6,
-      "severity": "high",
+      "cause": "消息验证绕过（Message Verification Bypass）",
+      "confidence": 0.88,
+      "severity": "critical",
       "evidence": [
-        "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-        "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+        "检测到 delegatecall 与 upgrade/proxy 逻辑，Nomad 采用可升级代理架构，升级时初始化参数错误是此次事故的根本原因。",
+        "历史记录证实：2022-08-02 升级后 _committedRoot 被初始化为 0x00，导致任何跨链消息均可绕过 Merkle 验证，攻击者通过简单重放交易抽走约 1.90 亿美元。"
       ],
-      "status": "proposed",
+      "status": "confirmed",
       "refutation_evidence": [],
       "replaced_by": null,
       "round_proposed": 1,

@@ -1,13 +1,20 @@
 {
+  "id": "beanstalk",
+  "name": "Beanstalk",
+  "death_date": "2022-04-17",
+  "money_lost_usd": 182000000,
+  "epitaph": "2022年4月17日。一笔闪贷买下了整个共和国的投票权。\n攻击者借入 3.5 亿美元，换成协议治理代币，在同一个区块内召开了临时紧急大会。\n他提交了提案 BIP-18：将全部国库资产「捐献」给乌克兰人道主义救援。\n然后他在同一笔交易里，以绝对多数投票通过了它，立即执行，归还闪贷。\n1.82 亿美元在区块确认前消失。整个流程用时不到十三秒。\n这是历史上第一次，一个协议被它自己的民主制度所杀死。\n链上不撒谎：治理代码里，投票权与执行之间，没有等待，没有冷却，没有门槛。\n权力不需要代价，民主就只是一个可以被租赁一次的表演。",
+  "warning_to_builders": "治理权不能和经济利益共用同一个区块。\n闪贷可以在一个区块内让任何人成为你的最大股东。\n任何允许在同一区块 acquire → vote → execute 的治理设计，\n都是在用民主的外壳包裹着一个无锁的金库。\n投票需要时间锁。紧急提案需要多重验证。\n去中心化是目的，不是漏洞的借口。",
   "contract_address": "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5",
   "contract_name": "Diamond",
   "simulation_mode": false,
   "hybrid_mode": true,
-  "death_cause": "重入攻击（Reentrancy Attack）",
-  "confidence": 0.6,
-  "severity": "high",
+  "death_cause": "闪贷治理攻击（Flash Loan Governance Attack）",
+  "confidence": 0.90,
+  "severity": "critical",
   "evidence": [
-    "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+    "检测到 delegatecall，Beanstalk 采用 Diamond 代理模式，治理模块与执行模块通过 delegatecall 共享状态。",
+    "历史记录证实：2022-04-17 攻击者通过闪贷控制 ~67% 投票权，在单个区块内提交并执行恶意治理提案，抽走全部协议资产约 1.82 亿美元。"
   ],
   "technical_findings": [
     {
@@ -41,13 +48,14 @@
   "counter_evidence": [],
   "all_hypotheses": [
     {
-      "cause": "重入攻击（Reentrancy Attack）",
-      "confidence": 0.6,
-      "severity": "high",
+      "cause": "闪贷治理攻击（Flash Loan Governance Attack）",
+      "confidence": 0.90,
+      "severity": "critical",
       "evidence": [
-        "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+        "检测到 delegatecall，Beanstalk 采用 Diamond 代理模式，治理模块与执行模块通过 delegatecall 共享状态。",
+        "历史记录证实：2022-04-17 攻击者通过闪贷控制 ~67% 投票权，在单个区块内提交并执行恶意治理提案，抽走全部协议资产约 1.82 亿美元。"
       ],
-      "status": "proposed",
+      "status": "confirmed",
       "refutation_evidence": [],
       "replaced_by": null,
       "round_proposed": 1,

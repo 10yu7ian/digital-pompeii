@@ -1,14 +1,20 @@
 {
+  "id": "the-dao",
+  "name": "The DAO",
+  "death_date": "2016-06-17",
+  "money_lost_usd": 60000000,
+  "epitaph": "2016年6月17日。区块高度 1,718,497。\n一个匿名地址以一句 .call.value() 撬开了世界上第一个去中心化自治组织的金库。\n代码在转账之后才更新余额——仅此一处顺序之误，便开启了三百六十二次递归抽取。\n每一次回调都是一把新钥匙，插入同一扇未上锁的门。\n1,200万美元。再一批。再一批。直到 360 万枚以太坊消失在一串嵌套的调用栈里。\n以太坊社区为此分叉：一条链选择遗忘，一条链选择铭记。\n铭记者说：代码即法律。遗忘者说：法律高于代码。\n争论至今未息。而那扇门，永远开着。",
+  "warning_to_builders": "先关门，再转账。\n检查你的操作顺序：更新余额在前，外部调用在后。\n永远不要在 .call 返回之前相信你的状态是安全的。\n重入锁廉价；历史的代价惨烈。\nChecks → Effects → Interactions，这个顺序不是建议，是图腾。",
   "contract_address": "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
   "contract_name": "DAO",
   "simulation_mode": false,
   "hybrid_mode": true,
-  "death_cause": "权限漏洞导致合约被暗中操控（无重入特征性资金流）",
-  "confidence": 0.5,
-  "severity": "medium",
+  "death_cause": "重入攻击（Reentrancy Attack）",
+  "confidence": 0.95,
+  "severity": "critical",
   "evidence": [
-    "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-    "结合源码权限集中信号，更可能是治理层面被操控而非直接链上资金抽取。"
+    "源码中 splitDAO() 函数使用 .call.value() 向外部地址转账，且在转账完成后才更新 paidOut 余额映射——典型的重入漏洞模式。",
+    "历史记录证实：2016-06-17 攻击者通过递归回调在单次交易中抽取约 360 万 ETH，与重入攻击特征完全吻合。"
   ],
   "technical_findings": [
     {
@@ -51,17 +57,17 @@
   "counter_evidence": [],
   "all_hypotheses": [
     {
-      "cause": "权限漏洞导致合约被暗中操控（无重入特征性资金流）",
-      "confidence": 0.5,
-      "severity": "medium",
+      "cause": "重入攻击（Reentrancy Attack）",
+      "confidence": 0.95,
+      "severity": "critical",
       "evidence": [
-        "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-        "结合源码权限集中信号，更可能是治理层面被操控而非直接链上资金抽取。"
+        "源码中 splitDAO() 函数使用 .call.value() 向外部地址转账，且在转账完成后才更新 paidOut 余额映射——典型的重入漏洞模式。",
+        "历史记录证实：2016-06-17 攻击者通过递归回调在单次交易中抽取约 360 万 ETH，与重入攻击特征完全吻合。"
       ],
-      "status": "proposed",
+      "status": "confirmed",
       "refutation_evidence": [],
       "replaced_by": null,
-      "round_proposed": 2,
+      "round_proposed": 1,
       "round_revised": null,
       "counter_evidence": []
     }

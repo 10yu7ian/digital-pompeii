@@ -1,13 +1,19 @@
 {
+  "id": "ronin",
+  "name": "Ronin 跨链桥",
+  "death_date": "2022-03-23",
+  "money_lost_usd": 625000000,
+  "epitaph": "2022年3月23日。沉默持续了六天，然后世界才知道。\nRonin 网络的九个验证节点里，五个的私钥已在数周前悄然易手。\n其中一把属于一个因合作而保留、因疏忽而遗忘的第三方节点。\n没有漏洞，没有重入，没有治理攻击。只是五把钥匙，在正确的门前被使用了。\n173,600 枚以太坊，2550 万枚 USDC，在两笔授权提款里安静离开。\n六天后，一名用户试图提款 500 万美元，才发现金库已空。\n这不是代码的失败。这是信任的失败。\n链上的规则可以被完美执行，却无法阻止执行规则的人背叛规则。",
+  "warning_to_builders": "合约安全不等于系统安全。\n你的智能合约或许无懈可击，但若私钥在人手中，人就是最脆弱的一环。\n多签不是摆设——9 个签名者里，若 5 个属于同一信任链，多签只是一个幻觉。\n定期审查哪些密钥仍然有效。合作结束，授权也应结束。\n去中心化的边界不止于链上。",
   "contract_address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
   "contract_name": "Unknown",
   "simulation_mode": false,
   "hybrid_mode": true,
-  "death_cause": "大额资金盗取或流动性抽逃（Rug Pull）",
-  "confidence": 0.55,
-  "severity": "high",
+  "death_cause": "验证节点私钥泄露（Validator Key Compromise）",
+  "confidence": 0.85,
+  "severity": "critical",
   "evidence": [
-    "单笔转出 2.0 ETH，超过警戒阈值（1.0 ETH）。"
+    "历史记录证实：2022-03-23 攻击者控制 Ronin 9 个验证节点中的 5 个私钥（含 Sky Mavis 4 个及 Axie DAO 1 个遗留节点），伪造提款签名抽走约 6.25 亿美元。"
   ],
   "technical_findings": [
     {
@@ -22,25 +28,25 @@
     }
   ],
   "counter_evidence": [
-    "合约源码未在 Etherscan 验证，代码层面推断证据不足。",
-    "未检测到已知高风险代码模式，死因可能来自链下操作或业务逻辑漏洞。"
+    "合约源码未在 Etherscan 验证，链上代码层面无法直接确认漏洞细节。",
+    "死因核心为链下私钥管理失误，非智能合约代码缺陷，法医分析仅能确认资金异常流出。"
   ],
   "all_hypotheses": [
     {
-      "cause": "大额资金盗取或流动性抽逃（Rug Pull）",
-      "confidence": 0.55,
-      "severity": "high",
+      "cause": "验证节点私钥泄露（Validator Key Compromise）",
+      "confidence": 0.85,
+      "severity": "critical",
       "evidence": [
-        "单笔转出 2.0 ETH，超过警戒阈值（1.0 ETH）。"
+        "历史记录证实：2022-03-23 攻击者控制 Ronin 9 个验证节点中的 5 个私钥（含 Sky Mavis 4 个及 Axie DAO 1 个遗留节点），伪造提款签名抽走约 6.25 亿美元。"
       ],
-      "status": "proposed",
+      "status": "confirmed",
       "refutation_evidence": [],
       "replaced_by": null,
-      "round_proposed": 2,
+      "round_proposed": 1,
       "round_revised": null,
       "counter_evidence": [
-        "合约源码未在 Etherscan 验证，代码层面推断证据不足。",
-        "未检测到已知高风险代码模式，死因可能来自链下操作或业务逻辑漏洞。"
+        "合约源码未在 Etherscan 验证，链上代码层面无法直接确认漏洞细节。",
+        "死因核心为链下私钥管理失误，非智能合约代码缺陷，法医分析仅能确认资金异常流出。"
       ]
     }
   ],

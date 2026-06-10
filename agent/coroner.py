@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import OpenAI, RateLimitError, APIStatusError
 
 
 # ---------------------------------------------------------------------------
@@ -32,16 +32,21 @@ MAX_ROUNDS = 5                          # 工具调用最大轮次，防止死�
 MAX_TX_DETAILS = 2                      # 每次调查最多深查几笔交易详情
 LARGE_VALUE_THRESHOLD_WEI = 1 * 10**18 # 可疑大额阈值（默认 1 ETH）
 
-# 调查推理模式。当前唯一活跃模式为 HYBRID_MODE。
+# 调查推理模式。
 SIMULATION_MODE: bool = False
-HYBRID_MODE: bool = True
+HYBRID_MODE: bool = False   # False = 全量 GLM 推理
 
 # GLM API 配置
 GLM_MODEL = "glm-4.7-flash"
 GLM_BASE_URL = "https://api.z.ai/api/paas/v4/"
 GLM_TIMEOUT_SECONDS = 60
-GLM_RATE_LIMIT_COOLDOWN_SECONDS = 3
+GLM_INTER_CALL_DELAY_SECONDS = 1        # 每次 GLM 调用后的固定间隔（防主动过快）
 AI_JSON_REPAIR_ATTEMPTS = 1
+
+# 限流重试配置（指数退避）
+GLM_RETRY_MAX_ATTEMPTS = 5
+GLM_RETRY_BASE_DELAY   = 8             # 初次限流等待秒数
+GLM_RETRY_MAX_DELAY    = 90            # 单次最长等待上限
 
 load_dotenv(PROJECT_ROOT / ".env")
 
@@ -64,10 +69,33 @@ def _log_status(message: str) -> None:
     print(f"[{timestamp}] {message}")
 
 
-def _wait_for_api_rate_limit_cooldown() -> None:
-    """GLM API 调用前后的限流冷却等待。"""
-    _log_status(f"等待 API 限流冷却：{GLM_RATE_LIMIT_COOLDOWN_SECONDS}s")
-    time.sleep(GLM_RATE_LIMIT_COOLDOWN_SECONDS)
+def _glm_call_with_retry(fn, label: str = "GLM"):
+    """
+    执行一次 GLM API 调用（fn 为无参 callable），遇到限流时指数退避重试。
+    其他异常直接抛出。
+    """
+    delay = GLM_RETRY_BASE_DELAY
+    for attempt in range(1, GLM_RETRY_MAX_ATTEMPTS + 1):
+        try:
+            _log_status(f"{label} 调用开始（第 {attempt} 次）")
+            result = fn()
+            time.sleep(GLM_INTER_CALL_DELAY_SECONDS)   # 调用成功后固定间隔
+            _log_status(f"{label} 调用完成")
+            return result
+        except RateLimitError as exc:
+            if attempt >= GLM_RETRY_MAX_ATTEMPTS:
+                _log_status(f"{label} 限流重试耗尽（{GLM_RETRY_MAX_ATTEMPTS} 次），放弃")
+                raise
+            _log_status(f"{label} 限流（429），等待 {delay}s 后重试（第 {attempt}/{GLM_RETRY_MAX_ATTEMPTS} 次）")
+            time.sleep(delay)
+            delay = min(delay * 2, GLM_RETRY_MAX_DELAY)
+        except APIStatusError as exc:
+            # 非 429 的 API 错误（5xx 等）也重试一次
+            if attempt >= GLM_RETRY_MAX_ATTEMPTS or exc.status_code < 500:
+                raise
+            _log_status(f"{label} API 错误 {exc.status_code}，等待 {delay}s 后重试")
+            time.sleep(delay)
+            delay = min(delay * 2, GLM_RETRY_MAX_DELAY)
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +128,9 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
         "function": {
             "name": "get_transactions",
             "description": (
-                "从 Etherscan 获取合约的最近普通交易列表，按时间倒序排列。"
-                "用于资金流追踪和异常交易识别。"
+                "从 Etherscan 获取合约的最近普通交易列表（外部调用），按时间倒序排列。"
+                "用于查看调用模式和基线行为。注意：重入攻击的资金流在内部交易中，"
+                "需配合 get_large_outflows 使用。"
             ),
             "parameters": {
                 "type": "object",
@@ -114,6 +143,37 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
                         "type": "integer",
                         "description": "返回的最大交易数，默认 10，最大 100",
                         "default": 10,
+                    },
+                },
+                "required": ["contract_address"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_large_outflows",
+            "description": (
+                "搜索合约的异常大额 ETH 流出，使用内部交易列表（txlistinternal）。"
+                "内部交易是合约代码执行时产生的 ETH 转账，是重入攻击、闪贷攻击等"
+                "资金盗取事件的关键证据来源。优先在普通交易未见资金流时使用此工具。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_address": {
+                        "type": "string",
+                        "description": "以 0x 开头的以太坊合约地址",
+                    },
+                    "min_eth": {
+                        "type": "number",
+                        "description": "最小 ETH 阈值，低于此值的转账忽略，默认 10 ETH",
+                        "default": 10,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回的最大内部交易数，默认 50",
+                        "default": 50,
                     },
                 },
                 "required": ["contract_address"],
@@ -294,6 +354,86 @@ def get_tx_detail(tx_hash: str) -> Dict[str, Any]:
     }
 
 
+def get_large_outflows(
+    contract_address: str,
+    min_eth: float = 10.0,
+    limit: int = 50,
+) -> Dict[str, Any]:
+    """工具：从 Etherscan 查询合约的大额 ETH 内部转账（txlistinternal）。
+
+    内部交易是合约代码执行时产生的 ETH 转账，重入攻击、闪贷攻击等
+    的资金盗取痕迹均在此处，普通 txlist 看不到。
+    """
+    def _fetch(sort_dir: str) -> list:
+        r = _request_etherscan({
+            "module": "account",
+            "action": "txlistinternal",
+            "address": contract_address,
+            "startblock": 0,
+            "endblock": 99999999,
+            "page": 1,
+            "offset": min(max(1, limit), 200),
+            "sort": sort_dir,
+        })
+        if isinstance(r, str) and "No transactions found" in r:
+            return []
+        return r if isinstance(r, list) else []
+
+    # 先查最新，再查最旧（捕获老合约历史攻击交易）
+    result_desc = _fetch("desc")
+    result_asc  = _fetch("asc")
+    # 合并去重（按 hash+from+to）
+    seen: set = set()
+    result: list = []
+    for tx in result_desc + result_asc:
+        key = (tx.get("hash",""), tx.get("from",""), tx.get("to",""), tx.get("value",""))
+        if key not in seen:
+            seen.add(key)
+            result.append(tx)
+
+    if not result:
+        return {"large_outflows": [], "total_scanned": 0, "min_eth_threshold": min_eth}
+
+    min_wei = int(min_eth * 1e18)
+    large = []
+    for tx in result:
+        raw = int(tx.get("value", "0"))
+        if raw < min_wei:
+            continue
+        large.append({
+            "hash": tx.get("hash"),
+            "from": tx.get("from"),
+            "to": tx.get("to"),
+            "value_eth": round(raw / 1e18, 4),
+            "value_wei": raw,
+            "timeStamp": tx.get("timeStamp"),
+            "type": tx.get("type", "call"),
+            "errCode": tx.get("errCode", ""),
+        })
+
+    # 按金额降序
+    large.sort(key=lambda x: x["value_wei"], reverse=True)
+
+    # 攻击者聚类：统计同一 to 地址累计流出
+    acc: Dict[str, float] = {}
+    for item in large:
+        to = item.get("to") or ""
+        acc[to] = acc.get(to, 0.0) + item["value_eth"]
+    top_recipients = sorted(
+        [{"address": addr, "total_eth": round(total, 4)} for addr, total in acc.items()],
+        key=lambda x: x["total_eth"],
+        reverse=True,
+    )[:5]
+
+    return {
+        "large_outflows": large[:20],
+        "large_outflow_count": len(large),
+        "total_scanned": len(result),
+        "min_eth_threshold": min_eth,
+        "top_recipients": top_recipients,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Tool dispatcher
 # ---------------------------------------------------------------------------
@@ -302,6 +442,11 @@ _TOOL_REGISTRY: Dict[str, Any] = {
     "get_contract_source": lambda a: get_contract_source(a["contract_address"]),
     "get_transactions": lambda a: get_transactions(
         a["contract_address"], a.get("limit", DEFAULT_TX_LIMIT)
+    ),
+    "get_large_outflows": lambda a: get_large_outflows(
+        a["contract_address"],
+        a.get("min_eth", 10.0),
+        a.get("limit", 50),
     ),
     "get_tx_detail": lambda a: get_tx_detail(a["tx_hash"]),
 }
@@ -508,25 +653,20 @@ def _get_glm_client() -> OpenAI:
 
 
 def _ai_call(system_prompt: str, user_prompt: str) -> str:
-    """调用 GLM API，返回模型回复文本。"""
+    """调用 GLM API，返回模型回复文本。遇到限流自动指数退避重试。"""
     client = _get_glm_client()
-    _wait_for_api_rate_limit_cooldown()
-    _log_status(f"GLM API 调用开始：model={GLM_MODEL}, mode=completion")
-    try:
-        response = client.chat.completions.create(
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+    response = _glm_call_with_retry(
+        lambda: client.chat.completions.create(
             model=GLM_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            messages=messages,
             temperature=0.2,
-        )
-    except Exception as exc:  # noqa: BLE001
-        _log_status(f"GLM API 调用失败：mode=completion, error={exc}")
-        raise
-    finally:
-        _wait_for_api_rate_limit_cooldown()
-    _log_status("GLM API 调用完成：mode=completion")
+        ),
+        label=f"GLM completion",
+    )
     return response.choices[0].message.content or ""
 
 
@@ -578,69 +718,62 @@ def _ai_json_call(system_prompt: str, user_prompt: str, expected_shape: str) -> 
     raise json.JSONDecodeError(last_error, reply, 0)
 
 
-def _ai_code_signals(source_code: str, contract_name: str) -> List[Dict[str, Any]]:
-    system_prompt = (
-        "你是智能合约安全审计专家。分析 Solidity 源码，"
-        "以 JSON 数组形式返回风险信号，每项含 type/severity/description。"
-        "severity 只能是 critical/high/medium/low。仅返回 JSON 数组。"
-    )
-    user_prompt = f"合约：{contract_name}\n\n```solidity\n{source_code[:8000]}\n```"
-    try:
-        data = _ai_json_call(system_prompt, user_prompt, "JSON 数组：[{type,severity,description}]")
-        return data if isinstance(data, list) else []
-    except json.JSONDecodeError:
-        reply = _ai_call(
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-        )
-        return [{"type": "ai_raw", "severity": "unknown", "description": reply}]
-
-
-def _ai_generate_hypotheses(
-    code_signals: List[Dict[str, Any]],
-    fund_result: Dict[str, Any],
-    tx_detail_findings: List[Dict[str, Any]],
+def _ai_synthesize_all(
+    source_code: str,
     contract_name: str,
-) -> List[Dict[str, Any]]:
-    context = json.dumps(
-        {"code_signals": code_signals, "fund_flow": fund_result, "tx_details": tx_detail_findings},
-        ensure_ascii=False,
-    )
-    system_prompt = (
-        "你是链上事故调查专家。根据提供的数据以 JSON 数组形式返回候选死因假设，"
-        "每项含 cause/confidence/severity/evidence。仅返回 JSON 数组。"
-    )
-    user_prompt = f"合约：{contract_name}\n\n数据：{context}"
-    try:
-        data = _ai_json_call(system_prompt, user_prompt, "JSON 数组：[{cause,confidence,severity,evidence}]")
-        return data if isinstance(data, list) else []
-    except json.JSONDecodeError:
-        reply = _ai_call(system_prompt=system_prompt, user_prompt=user_prompt)
-        return [{"cause": reply, "confidence": 0.5, "severity": "unknown", "evidence": []}]
-
-
-def _ai_counter_evidence(
-    hypotheses: List[Dict[str, Any]],
-    code_signals: List[Dict[str, Any]],
     transactions: List[Dict[str, Any]],
-    contract_name: str,
-) -> List[str]:
-    context = json.dumps(
-        {"hypotheses": hypotheses, "code_signals": code_signals,
-         "recent_tx_count": len(transactions)},
-        ensure_ascii=False,
-    )
+    large_outflows: Dict[str, Any],
+    tx_detail_findings: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """一次 GLM 调用完成全部综合分析，返回 code_signals / hypotheses / counter_evidence。"""
     system_prompt = (
-        "你是链上事故调查专家。寻找能推翻或削弱当前假设的反证，"
-        "以 JSON 字符串数组形式返回。仅返回 JSON 数组。"
+        "你是 Digital Pompeii 链上验尸专家，一次性完成以下三项分析并以 JSON 对象返回，"
+        "不要输出任何解释或 Markdown，只输出合法 JSON。\n\n"
+        "返回格式：\n"
+        "{\n"
+        '  "code_signals": [{\"type\": str, \"severity\": "critical|high|medium|low", \"description\": str}],\n'
+        '  "hypotheses": [{\"cause\": str, \"confidence\": float(0-1), \"severity\": str, \"evidence\": [str]}],\n'
+        '  "counter_evidence": [str]\n'
+        "}\n\n"
+        "分析要求：\n"
+        "1. code_signals：扫描 Solidity 源码的安全风险信号\n"
+        "2. hypotheses：综合代码信号 + 资金流 + 交易详情，给出死因假设，按置信度降序\n"
+        "3. counter_evidence：能削弱或推翻最高置信假设的反证\n\n"
+        "重要提示：如果 large_outflows 中存在大额内部 ETH 转出，且源码有重入漏洞信号，"
+        "则重入攻击假设置信度应 >= 0.80。"
     )
-    user_prompt = f"合约：{contract_name}\n\n数据：{context}"
+    context = json.dumps({
+        "contract_name": contract_name,
+        "source_code_preview": source_code[:6000],
+        "recent_transactions_count": len(transactions),
+        "large_outflows": large_outflows,
+        "tx_detail_findings": tx_detail_findings,
+    }, ensure_ascii=False)
+    user_prompt = f"请分析合约 {contract_name}：\n\n{context}"
+
     try:
-        data = _ai_json_call(system_prompt, user_prompt, "JSON 字符串数组")
-        return data if isinstance(data, list) else []
-    except json.JSONDecodeError:
-        reply = _ai_call(system_prompt=system_prompt, user_prompt=user_prompt)
-        return [reply]
+        data = _ai_json_call(system_prompt, user_prompt, "{code_signals, hypotheses, counter_evidence}")
+        if not isinstance(data, dict):
+            raise ValueError("返回值不是 dict")
+        return {
+            "code_signals": data.get("code_signals") or [],
+            "hypotheses": data.get("hypotheses") or [],
+            "counter_evidence": data.get("counter_evidence") or [],
+        }
+    except (json.JSONDecodeError, ValueError):
+        # 降级：用规则引擎兜底
+        _log_status("AI synthesis 解析失败，降级为规则引擎")
+        code_signals = _sim_code_signals(source_code)
+        fund_result = _sim_fund_signals(transactions)
+        hypotheses = _sim_generate_hypotheses(code_signals, fund_result, tx_detail_findings)
+        counter = _sim_counter_evidence(
+            bool(source_code), len(transactions), code_signals
+        )
+        return {
+            "code_signals": code_signals,
+            "hypotheses": hypotheses,
+            "counter_evidence": counter,
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -795,18 +928,45 @@ class SimulationPlanner:
                 "type": "tool_call",
                 "tool": "get_transactions",
                 "args": {"contract_address": self._address, "limit": DEFAULT_TX_LIMIT},
-                "reasoning": "第二步：拉取最近交易列表，用链上资金流证据验证或修正初始假设。",
+                "reasoning": "第二步：拉取最近普通交易，建立调用模式基线。",
             }
 
         if self._action_phase == 2:
+            self._action_phase = 3
+            return {
+                "type": "tool_call",
+                "tool": "get_large_outflows",
+                "args": {"contract_address": self._address, "min_eth": 10.0, "limit": 50},
+                "reasoning": (
+                    "第三步：搜索内部交易中的大额 ETH 流出。"
+                    "重入攻击、闪贷攻击的资金盗取均体现在内部交易中，"
+                    "普通 txlist 无法捕获。"
+                ),
+            }
+
+        if self._action_phase == 3:
+            # 优先从 large_outflows 里取可疑 tx hash，其次从 transactions
+            large = state.get("large_outflows") or {}
+            outflow_hashes = [
+                item["hash"] for item in (large.get("large_outflows") or [])
+                if item.get("hash")
+            ][:MAX_TX_DETAILS]
             txs: List[Dict[str, Any]] = state.get("transactions") or []
-            self._pending_hashes = [
+            tx_hashes = [
                 tx["hash"] for tx in txs
                 if int(tx.get("value", "0")) >= LARGE_VALUE_THRESHOLD_WEI
             ][:MAX_TX_DETAILS]
-            self._action_phase = 3
+            # 合并去重，large_outflows 优先
+            seen: set = set()
+            combined = []
+            for h in outflow_hashes + tx_hashes:
+                if h not in seen:
+                    seen.add(h)
+                    combined.append(h)
+            self._pending_hashes = combined[:MAX_TX_DETAILS]
+            self._action_phase = 4
 
-        if self._action_phase == 3:
+        if self._action_phase == 4:
             if self._detail_index < len(self._pending_hashes):
                 h = self._pending_hashes[self._detail_index]
                 self._detail_index += 1
@@ -815,15 +975,15 @@ class SimulationPlanner:
                     "tool": "get_tx_detail",
                     "args": {"tx_hash": h},
                     "reasoning": (
-                        f"该交易金额超过警戒阈值（{LARGE_VALUE_THRESHOLD_WEI / 1e18} ETH），"
+                        f"该交易涉及大额 ETH 转出，"
                         "深入查看执行状态和 logs，进一步确认假设。"
                     ),
                 }
-            self._action_phase = 4
+            self._action_phase = 5
 
         return {
             "type": "final_output",
-            "reasoning": "已收集合约源码、交易列表及可疑交易详情，进入综合分析阶段。",
+            "reasoning": "已收集合约源码、交易列表、大额资金流及可疑交易详情，进入综合分析阶段。",
         }
 
     # ──────────────────────────────────────────────────────────────────
@@ -847,9 +1007,13 @@ class SimulationPlanner:
             events = self._revise_from_transactions(state.get("transactions", []), round_num)
             self._evidence_phase = 2
 
-        elif self._evidence_phase == 2 and state.get("tx_details"):
-            events = self._revise_from_tx_details(state.get("tx_details", {}), round_num)
+        elif self._evidence_phase == 2 and state.get("large_outflows") is not None:
+            events = self._revise_from_large_outflows(state["large_outflows"], round_num)
             self._evidence_phase = 3
+
+        elif self._evidence_phase == 3 and state.get("tx_details"):
+            events = self._revise_from_tx_details(state.get("tx_details", {}), round_num)
+            self._evidence_phase = 4
 
         return events
 
@@ -952,39 +1116,21 @@ class SimulationPlanner:
 
         if "重入攻击" in current["cause"]:
             if value_count == 0:
-                # 关键反证：无 ETH 转出 → 不符合重入攻击特征 → 修正
-                refutation = (
-                    f"交易样本（{len(transactions)} 笔）中 ETH 转账为零，"
-                    "与重入攻击连续小额快速抽资的典型资金流特征不符。"
+                # 普通交易无 ETH 转出，但这是正常的——重入资金流在内部交易中
+                # 此阶段仅轻微下调，等待 get_large_outflows 结果再判断
+                old_conf = current["confidence"]
+                current["confidence"] = max(0.0, round(old_conf - 0.05, 2))
+                reason = (
+                    f"普通交易样本（{len(transactions)} 笔）中未见 ETH 转出，"
+                    "但重入攻击资金流通常体现在内部交易中，需进一步查询大额出账。"
                 )
-                new_cause = "权限漏洞导致合约被暗中操控（无重入特征性资金流）"
-                new_confidence = 0.50
-                new_evidence = current["evidence"] + [
-                    "结合源码权限集中信号，更可能是治理层面被操控而非直接链上资金抽取。"
-                ]
-
-                # 归档旧假设
-                old = current.copy()
-                old["status"] = "revised"
-                old["refutation_evidence"] = [refutation]
-                old["replaced_by"] = new_cause
-                old["round_revised"] = round_num
-                self.alternative_hypotheses.append(old)
-
-                # 激活新假设
-                new_h = self._make_hypothesis(
-                    new_cause, new_confidence, "medium", new_evidence, round_num
-                )
-                self.active_hypotheses = [new_h]
-
                 events.append({
-                    "event": "revised",
+                    "event": "updated",
                     "round": round_num,
-                    "old_hypothesis": current["cause"],
-                    "new_hypothesis": new_cause,
-                    "confidence_before": current["confidence"],
-                    "confidence_after": new_confidence,
-                    "reason": refutation,
+                    "hypothesis": current["cause"],
+                    "confidence_before": old_conf,
+                    "confidence_after": current["confidence"],
+                    "reason": reason,
                 })
 
             elif suspicious:
@@ -1073,6 +1219,110 @@ class SimulationPlanner:
         return events
 
     # ──────────────────────────────────────────────────────────────────
+    # 内部：基于大额内部出账确认/修正假设
+    # ──────────────────────────────────────────────────────────────────
+
+    def _revise_from_large_outflows(
+        self, large_outflows: Dict[str, Any], round_num: int
+    ) -> List[Dict[str, Any]]:
+        if not self.active_hypotheses:
+            return []
+
+        current = self.active_hypotheses[0]
+        events: List[Dict[str, Any]] = []
+        outflows = large_outflows.get("large_outflows") or []
+        count = large_outflows.get("large_outflow_count", 0)
+        top = large_outflows.get("top_recipients") or []
+
+        if not outflows:
+            # 无大额内部出账 → 重入假设证据不足，修正
+            if "重入攻击" in current["cause"]:
+                refutation = (
+                    f"内部交易中未发现超过 {large_outflows.get('min_eth_threshold', 10)} ETH "
+                    "的大额流出，重入攻击的连续抽资特征不成立。"
+                )
+                new_cause = "权限漏洞或治理攻击（无链上大额资金流出）"
+                new_confidence = 0.45
+                new_evidence = current["evidence"] + [refutation]
+
+                old = current.copy()
+                old["status"] = "revised"
+                old["refutation_evidence"] = [refutation]
+                old["replaced_by"] = new_cause
+                old["round_revised"] = round_num
+                self.alternative_hypotheses.append(old)
+
+                new_h = self._make_hypothesis(
+                    new_cause, new_confidence, "medium", new_evidence, round_num
+                )
+                self.active_hypotheses = [new_h]
+
+                events.append({
+                    "event": "revised",
+                    "round": round_num,
+                    "old_hypothesis": current["cause"],
+                    "new_hypothesis": new_cause,
+                    "confidence_before": current["confidence"],
+                    "confidence_after": new_confidence,
+                    "reason": refutation,
+                })
+            return events
+
+        # 找到大额内部出账
+        total_eth = sum(item.get("value_eth", 0) for item in outflows)
+        top_addr = top[0]["address"] if top else "未知"
+        top_eth = top[0]["total_eth"] if top else 0
+
+        if "重入攻击" in current["cause"]:
+            # 确认重入假设
+            old_conf = current["confidence"]
+            current["confidence"] = min(0.92, round(old_conf + 0.20, 2))
+            confirm_reason = (
+                f"内部交易发现 {count} 笔大额 ETH 流出，合计约 {round(total_eth, 1)} ETH。"
+                f"最大受益地址 {top_addr[:16]}... 累计获得 {top_eth} ETH，"
+                "与重入攻击反复调用 withdraw 抽取资金的链上特征高度吻合。"
+            )
+            current["evidence"].append(confirm_reason)
+            current["status"] = "confirmed"
+            events.append({
+                "event": "confirmed",
+                "round": round_num,
+                "hypothesis": current["cause"],
+                "confidence_before": old_conf,
+                "confidence_after": current["confidence"],
+                "reason": confirm_reason,
+            })
+        else:
+            # 非重入假设但发现大额出账 → 修正为资金盗取
+            new_cause = f"大额资金盗取（内部交易发现 {round(total_eth, 1)} ETH 异常流出）"
+            new_confidence = 0.70
+            evidence_str = (
+                f"内部交易中检测到 {count} 笔超阈值 ETH 流出，"
+                f"集中流向地址 {top_addr[:16]}...，疑似攻击者地址。"
+            )
+            old = current.copy()
+            old["status"] = "revised"
+            old["replaced_by"] = new_cause
+            old["round_revised"] = round_num
+            self.alternative_hypotheses.append(old)
+
+            new_h = self._make_hypothesis(
+                new_cause, new_confidence, "high", [evidence_str], round_num
+            )
+            self.active_hypotheses = [new_h]
+            events.append({
+                "event": "revised",
+                "round": round_num,
+                "old_hypothesis": current["cause"],
+                "new_hypothesis": new_cause,
+                "confidence_before": current["confidence"],
+                "confidence_after": new_confidence,
+                "reason": evidence_str,
+            })
+
+        return events
+
+    # ──────────────────────────────────────────────────────────────────
     # 内部：基于交易详情进一步确认
     # ──────────────────────────────────────────────────────────────────
 
@@ -1149,7 +1399,8 @@ class CoronerAgent:
             "contract_address": None,
             "contract_source": None,
             "transactions": [],
-            "tx_details": {},  # hash → detail dict
+            "large_outflows": None,  # get_large_outflows 结果
+            "tx_details": {},        # hash → detail dict
         }
         # 当前运行的规划器（综合分析阶段读取假设历史）
         self._planner: Optional[SimulationPlanner] = None
@@ -1228,6 +1479,9 @@ class CoronerAgent:
 
         # ── 综合分析 ─────────────────────────────────────────────────
         self._banner("综合分析（Synthesis）")
+        if not (self.hybrid_mode or self.simulation_mode):
+            _log_status("等待 75s 让 GLM 限流窗口刷新，然后进行综合分析……")
+            time.sleep(75)
         _log_status("正在生成报告")
         exhibit = self.synthesize_exhibit()
         logger.log_synthesis(exhibit)
@@ -1340,22 +1594,23 @@ class CoronerAgent:
         contract_name: str = contract_source.get("contract_name") or "Unknown"
         verified: bool = contract_source.get("verified", False)
 
-        # ① 代码信号
-        self._log("分析", "扫描代码风险信号")
-        if self.hybrid_mode or self.simulation_mode:
-            code_signals = _sim_code_signals(source_code)
-        else:
-            code_signals = _ai_code_signals(source_code, contract_name)
-        for sig in code_signals:
-            self._log(f"  [{sig['severity'].upper()}] {sig['type']}", sig["description"])
-
-        # ② 资金流分析
+        # ① 资金流分析（合并普通交易 + 内部交易大额出账）
         self._log("分析", "识别资金流异常")
         fund_result = _sim_fund_signals(transactions)
+        large_outflows_data = self.state.get("large_outflows") or {}
+        for item in large_outflows_data.get("large_outflows") or []:
+            fund_result["suspicious_outflows"].append({
+                **item,
+                "flag": (
+                    f"内部交易大额流出 {item.get('value_eth', 0)} ETH"
+                    f" → {(item.get('to') or '')[:20]}..."
+                ),
+                "source": "internal_tx",
+            })
         self._log("带 value 交易数", fund_result["value_transfer_count"])
-        self._log("可疑流出数", len(fund_result["suspicious_outflows"]))
+        self._log("可疑流出数（含内部交易）", len(fund_result["suspicious_outflows"]))
 
-        # ③ 交易详情异常
+        # ② 交易详情异常
         tx_detail_findings: List[Dict[str, Any]] = []
         for tx_hash, detail in tx_details.items():
             if isinstance(detail, dict) and not detail.get("error"):
@@ -1369,51 +1624,52 @@ class CoronerAgent:
                         ),
                     })
 
-        # ④ 假设生成
-        #    HYBRID/SIMULATION: 优先使用 planner 在工具调用过程中已动态维护的假设；
-        #    AI MODE / 无 planner: 在综合阶段一次性生成。
-        self._log("分析", "整合候选死因假设")
+        # ③ 综合分析：AI 模式一次调用，规则模式分步执行
+        self._log("分析", "综合代码 + 资金流 + 交易，生成死因结论")
 
-        planner_active = (
-            self._planner.active_hypotheses if self._planner else []
-        )
-        planner_alternatives = (
-            self._planner.alternative_hypotheses if self._planner else []
-        )
+        planner_active = self._planner.active_hypotheses if self._planner else []
+        planner_alternatives = self._planner.alternative_hypotheses if self._planner else []
 
-        if (self.hybrid_mode or self.simulation_mode) and planner_active:
-            # 直接使用 planner 动态维护的假设（已在工具调用过程中持续修正）
-            hypotheses = planner_active
-            alternative_hypotheses = planner_alternatives
-            self._log("来源", "来自本地规则 Planner 动态假设追踪")
-        else:
-            # AI 模式或 planner 为空：综合阶段一次性生成
-            if self.hybrid_mode or self.simulation_mode:
-                hypotheses = _sim_generate_hypotheses(code_signals, fund_result, tx_detail_findings)
+        if self.hybrid_mode or self.simulation_mode:
+            # 规则模式：先扫代码信号，再用 planner 结果
+            code_signals = _sim_code_signals(source_code)
+            for sig in code_signals:
+                self._log(f"  [{sig['severity'].upper()}] {sig['type']}", sig["description"])
+
+            if planner_active:
+                hypotheses = planner_active
+                alternative_hypotheses = planner_alternatives
+                self._log("来源", "Planner 动态假设追踪")
             else:
-                hypotheses = _ai_generate_hypotheses(code_signals, fund_result, tx_detail_findings, contract_name)
+                hypotheses = _sim_generate_hypotheses(code_signals, fund_result, tx_detail_findings)
+                alternative_hypotheses = []
+                self._log("来源", "规则引擎一次性生成")
+
+            counter_evidence = _sim_counter_evidence(verified, len(transactions), code_signals)
+
+        else:
+            # AI 模式：一次 GLM 调用搞定代码信号 + 假设 + 反证
+            _log_status("AI synthesis：单次 GLM 调用生成全部分析结果")
+            ai_result = _ai_synthesize_all(
+                source_code, contract_name, transactions,
+                large_outflows_data, tx_detail_findings,
+            )
+            code_signals = ai_result["code_signals"]
+            hypotheses = ai_result["hypotheses"]
+            counter_evidence = ai_result["counter_evidence"]
             alternative_hypotheses = []
-            self._log("来源", "综合阶段规则/AI 一次性生成")
+            self._log("来源", "AI 单次综合调用")
+            for sig in code_signals:
+                self._log(f"  [{sig.get('severity','?').upper()}] {sig.get('type','?')}", sig.get("description",""))
 
         for i, h in enumerate(hypotheses, 1):
             self._log(
-                f"  假设 {i} [{h.get('severity','?').upper()}] status={h.get('status','?')}",
-                f"confidence={h['confidence']}  {h['cause']}",
+                f"  假设 {i} [{h.get('severity','?').upper()}]",
+                f"confidence={h.get('confidence')}  {h.get('cause')}",
             )
         if alternative_hypotheses:
             self._log(f"被替换的旧假设（{len(alternative_hypotheses)} 条）")
-            for alt in alternative_hypotheses:
-                self._log(
-                    f"  [REPLACED] {alt['cause'][:50]}...",
-                    f"→ {alt.get('replaced_by', '?')[:40]}",
-                )
 
-        # ⑤ 反证搜索
-        self._log("分析", "搜索反证")
-        if self.hybrid_mode or self.simulation_mode:
-            counter_evidence = _sim_counter_evidence(verified, len(transactions), code_signals)
-        else:
-            counter_evidence = _ai_counter_evidence(hypotheses, code_signals, transactions, contract_name)
         for c in counter_evidence:
             self._log("  [-]", c)
 
@@ -1536,6 +1792,8 @@ class CoronerAgent:
             self.state["contract_source"] = result
         elif tool_name == "get_transactions":
             self.state["transactions"] = result if isinstance(result, list) else []
+        elif tool_name == "get_large_outflows":
+            self.state["large_outflows"] = result
         elif tool_name == "get_tx_detail":
             self.state["tx_details"][args.get("tx_hash", "")] = result
 
@@ -1550,10 +1808,13 @@ class CoronerAgent:
                 "content": (
                     "你是 Digital Pompeii 链上验尸 Agent，专门调查已死亡的以太坊 DeFi 协议。\n"
                     "调查流程：\n"
-                    "  1. get_contract_source — 获取合约源码和 ABI\n"
-                    "  2. get_transactions   — 获取最近交易列表\n"
-                    "  3. get_tx_detail      — 对可疑大额交易深入查看（可选）\n"
-                    "  4. 信息充分后停止工具调用，直接输出结案分析\n\n"
+                    "  1. get_contract_source  — 获取合约源码和 ABI\n"
+                    "  2. get_transactions     — 获取最近普通交易（调用模式基线）\n"
+                    "  3. get_large_outflows   — 搜索内部交易大额 ETH 流出（重要！重入/闪贷攻击的资金流在这里）\n"
+                    "  4. get_tx_detail        — 对可疑大额交易深入查看（可选）\n"
+                    "  5. 信息充分后停止工具调用，直接输出结案分析\n\n"
+                    "重要提示：普通交易（txlist）看不到合约内部 ETH 转账，"
+                    "重入攻击、闪贷攻击的资金盗取均体现在内部交易中，必须调用 get_large_outflows。\n"
                     "你的输出将被后端综合分析模块处理，请尽量收集完整信息后再停止。"
                 ),
             },
@@ -1564,25 +1825,21 @@ class CoronerAgent:
         ]
 
     def _ai_get_next_action(self) -> Dict[str, Any]:
-        """调用 GLM API（带 tool_schemas），解析返回的工具调用或结案决定。"""
+        """调用 GLM API（带 tool_schemas），解析返回的工具调用或结案决定。遇到限流自动重试。"""
         client = _get_glm_client()
-        _wait_for_api_rate_limit_cooldown()
-        _log_status(f"GLM API 调用开始：model={GLM_MODEL}, mode=tool_calling")
-        try:
-            response = client.chat.completions.create(
+        messages_snapshot = list(self._messages)   # 快照，防重试时消息被修改
+        response = _glm_call_with_retry(
+            lambda: client.chat.completions.create(
                 model=GLM_MODEL,
-                messages=self._messages,
+                messages=messages_snapshot,
                 tools=TOOL_SCHEMAS,
                 tool_choice="auto",
                 temperature=0.1,
-            )
-        except Exception as exc:  # noqa: BLE001
-            _log_status(f"GLM API 调用失败：mode=tool_calling, error={exc}")
-            raise
-        finally:
-            _wait_for_api_rate_limit_cooldown()
+            ),
+            label="GLM tool_calling",
+        )
         choice = response.choices[0]
-        _log_status(f"GLM API 调用完成：mode=tool_calling, finish_reason={choice.finish_reason}")
+        _log_status(f"GLM tool_calling finish_reason={choice.finish_reason}")
         message = choice.message
         # 将 assistant 消息追加到对话历史（转为 dict 以便序列化）
         self._messages.append(message.model_dump(exclude_unset=False))

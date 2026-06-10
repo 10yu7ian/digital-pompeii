@@ -1,122 +1,186 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { cases } from "./data/cases";
+import Landing from "./components/Landing";
+import CaseCard from "./components/CaseCard";
+import CaseDetail from "./components/CaseDetail";
+import AgentConsole from "./components/AgentConsole";
+import "./App.css";
 
-function App() {
-  const [count, setCount] = useState(0)
+const TABS = [
+  { id: "exhibit",  label: "展品详情" },
+  { id: "console",  label: "调查日志",  badge: "AI" },
+];
+
+export default function App() {
+  const [entered, setEntered] = useState(false);
+  const [activeId, setActiveId] = useState(cases[0]?.id ?? null);
+
+  const handleEnter = (id) => {
+    if (id) setActiveId(id);
+    setEntered(true);
+  };
+  const [activeTab, setActiveTab] = useState("exhibit");
+  const activeCase = cases.find((c) => c.id === activeId) ?? null;
+  const mainRef = useRef(null);
+
+  useEffect(() => {
+    if (!entered) return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (mainRef.current) mainRef.current.scrollTop = 0;
+  }, [activeId, activeTab, entered]);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="min-h-screen bg-[#060608] text-[#e8e4dc]">
+      <AnimatePresence mode="wait">
+        {!entered ? (
+          <motion.div
+            key="landing"
+            exit={{ opacity: 0, scale: 1.02, filter: "blur(12px)" }}
+            transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+          >
+            <Landing onEnter={handleEnter} />
+          </motion.div>
+        ) : (
+          <motion.div
+            key="museum"
+            initial={{ opacity: 0, filter: "blur(8px)" }}
+            animate={{ opacity: 1, filter: "blur(0px)" }}
+            transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            className="min-h-screen"
+          >
+            {/* Top bar */}
+            <header className="sticky top-0 z-50 border-b border-white/[0.04] bg-[#060608]/90 backdrop-blur-xl px-6 md:px-10 py-4">
+              <div className="mx-auto flex max-w-[1400px] items-center justify-between">
+                <button
+                  onClick={() => setEntered(false)}
+                  className="group flex items-center gap-3"
+                >
+                  <span
+                    className="font-playfair text-lg text-[#e8dcc8] group-hover:text-amber-200 transition-colors"
+                    style={{ textShadow: "0 0 40px rgba(200,130,40,0.2)" }}
+                  >
+                    Digital Pompeii
+                  </span>
+                  <span className="font-playfair italic text-sm text-amber-700/50 group-hover:text-amber-600/60 transition-colors">
+                    数字庞贝
+                  </span>
+                </button>
+                <div className="flex items-center gap-6">
+                  <span className="hidden sm:block text-[10px] tracking-[0.25em] text-zinc-600 uppercase font-mono-plex">
+                    {cases.length} Exhibits
+                  </span>
+                  <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
+                  <span className="text-[10px] tracking-[0.25em] text-zinc-600 uppercase font-mono-plex">
+                    Archive
+                  </span>
+                </div>
+              </div>
+            </header>
 
-      <div className="ticks"></div>
+            <div className="mx-auto flex max-w-[1400px] gap-0 lg:gap-8 px-4 lg:px-10 py-8">
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+              {/* Sidebar */}
+              <aside className="w-full lg:w-[280px] xl:w-[300px] shrink-0 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
+                <p className="px-1 text-[10px] tracking-[0.28em] text-zinc-600 uppercase font-mono-plex mb-5">
+                  Exhibits · {cases.length}
+                </p>
+                <div className="space-y-2">
+                  {cases.map((c) => (
+                    <CaseCard
+                      key={c.id}
+                      caseData={c}
+                      isActive={c.id === activeId}
+                      onClick={() => setActiveId(c.id)}
+                    />
+                  ))}
+                </div>
+              </aside>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+              {/* Main panel */}
+              <main ref={mainRef} className="hidden lg:flex flex-col flex-1 min-w-0">
+                {/* Tab bar */}
+                <div className="flex gap-0 mb-6 border-b border-white/[0.05]">
+                  {TABS.map((tab) => (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`relative px-5 py-3 text-sm transition-colors duration-200 ${
+                        activeTab === tab.id
+                          ? "text-[#e8dcc8]"
+                          : "text-zinc-600 hover:text-zinc-400"
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        {tab.label}
+                        {tab.badge && (
+                          <span className="rounded-sm bg-sky-500/15 text-sky-400 text-[10px] px-1.5 py-0.5 font-mono-plex tracking-wider">
+                            {tab.badge}
+                          </span>
+                        )}
+                      </span>
+                      {activeTab === tab.id && (
+                        <motion.div
+                          layoutId="tab-indicator"
+                          className="absolute bottom-0 left-0 right-0 h-px bg-amber-600/60"
+                        />
+                      )}
+                    </button>
+                  ))}
+                </div>
+
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={`${activeId}-${activeTab}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                  >
+                    {activeTab === "exhibit" && <CaseDetail caseData={activeCase} />}
+                    {activeTab === "console" && <AgentConsole caseData={activeCase} />}
+                  </motion.div>
+                </AnimatePresence>
+              </main>
+            </div>
+
+            {/* Mobile view */}
+            <div className="lg:hidden px-4">
+              <div className="flex gap-0 mb-4 border-b border-white/[0.05]">
+                {TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`relative px-4 py-2.5 text-sm transition-colors ${
+                      activeTab === tab.id ? "text-[#e8dcc8]" : "text-zinc-600"
+                    }`}
+                  >
+                    {tab.label}
+                    {activeTab === tab.id && (
+                      <motion.div
+                        layoutId="tab-indicator-mobile"
+                        className="absolute bottom-0 left-0 right-0 h-px bg-amber-600/60"
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={`${activeId}-${activeTab}-mobile`}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                >
+                  {activeTab === "exhibit" && <CaseDetail caseData={activeCase} />}
+                  {activeTab === "console" && <AgentConsole caseData={activeCase} />}
+                </motion.div>
+              </AnimatePresence>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
-
-export default App
