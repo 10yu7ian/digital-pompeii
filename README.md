@@ -7,9 +7,9 @@
 
 **一句话**：输入一个已经死去的链上项目地址，一个自主 Agent 会像法医一样，从不可篡改的链上证据里还原它真正的死因，再像策展人一样，把它立成一座兼具技术严谨与文学重量的「警示碑」，陈列在一座黑暗博物馆里。
 
+- 🏛️ 博物馆入口：https://digital-pompeii.vercel.app
 - 🎬 Demo 视频：〈3–5 分钟视频链接〉
-- 🌐 在线演示：〈可访问的 Demo 链接〉
-- 🏛️ 赛道：Z.AI · Web3 × Long-Horizon Task
+- 🏆 赛道：Z.AI · Web3 × Long-Horizon Task
 
 ---
 
