@@ -1,112 +1,134 @@
 {
-  "id": "the-dao",
-  "name": "The DAO",
-  "death_date": "2016-06-17",
-  "money_lost_usd": 60000000,
-  "epitaph": "2016年6月17日。区块高度 1,718,497。\n一个匿名地址以一句 .call.value() 撬开了世界上第一个去中心化自治组织的金库。\n代码在转账之后才更新余额——仅此一处顺序之误，便开启了三百六十二次递归抽取。\n每一次回调都是一把新钥匙，插入同一扇未上锁的门。\n1,200万美元。再一批。再一批。直到 360 万枚以太坊消失在一串嵌套的调用栈里。\n以太坊社区为此分叉：一条链选择遗忘，一条链选择铭记。\n铭记者说：代码即法律。遗忘者说：法律高于代码。\n争论至今未息。而那扇门，永远开着。",
-  "warning_to_builders": "先关门，再转账。\n检查你的操作顺序：更新余额在前，外部调用在后。\n永远不要在 .call 返回之前相信你的状态是安全的。\n重入锁廉价；历史的代价惨烈。\nChecks → Effects → Interactions，这个顺序不是建议，是图腾。",
   "contract_address": "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
   "contract_name": "DAO",
   "simulation_mode": false,
-  "hybrid_mode": true,
-  "death_cause": "重入攻击（Reentrancy Attack）",
-  "confidence": 0.95,
+  "hybrid_mode": false,
+  "death_cause": "重入攻击",
+  "confidence": 0.93,
   "severity": "critical",
   "evidence": [
-    "源码中 splitDAO() 函数使用 .call.value() 向外部地址转账，且在转账完成后才更新 paidOut 余额映射——典型的重入漏洞模式。",
-    "历史记录证实：2016-06-17 攻击者通过递归回调在单次交易中抽取约 360 万 ETH，与重入攻击特征完全吻合。"
+    "源码确认为历史著名的 The DAO 合约，该合约因重入攻击漏洞被黑客利用而导致以太坊硬分叉",
+    "交易详情中记录了一笔带有 31 个日志的异常交易，高度符合重入攻击中资金被多次循环递归提取的链上特征",
+    "日志数量巨大且伴随 ETH 流出，表明在单一交易中触发了多次资金转移和事件记录"
   ],
   "technical_findings": [
     {
       "evidence_type": "code_vulnerability",
       "tx_hash": null,
       "involved_addresses": [
-        "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"
+        "0x304a554a310c7e546dfe434669c62820b7d83490"
       ],
-      "reasoning": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-      "confidence": 0.8
+      "reasoning": "源码为著名的 The DAO 合约，其内部逻辑中存在典型的在更新账户余额之前向外发送以太币的缺陷，导致攻击者可以通过递归调用（fallback 函数）反复提取资金。",
+      "confidence": 0.9
     },
     {
       "evidence_type": "code_vulnerability",
       "tx_hash": null,
       "involved_addresses": [
-        "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"
+        "0x304a554a310c7e546dfe434669c62820b7d83490"
       ],
-      "reasoning": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。",
+      "reasoning": "代码使用了极为古老的 Solidity 语法和结构（如 `throw` 关键字），缺乏现代安全防护机制（如重入锁 modifier）。",
       "confidence": 0.6
     },
     {
-      "evidence_type": "code_vulnerability",
-      "tx_hash": null,
+      "evidence_type": "on_chain_transaction",
+      "tx_hash": "0x0ec3f2488a93839524add10ea229e773f6bc891b4eb4794c3337d4495263790b",
       "involved_addresses": [
-        "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"
+        "0x304a554a310c7e546dfe434669c62820b7d83490"
       ],
-      "reasoning": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。",
-      "confidence": 0.6
+      "reasoning": "状态=unknown, logs=31, value=137.624511 ETH",
+      "confidence": 0.75
     },
     {
       "evidence_type": "historical_record",
       "tx_hash": null,
       "involved_addresses": [
-        "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"
+        "0x304a554a310c7e546dfe434669c62820b7d83490"
       ],
       "reasoning": "合约 DAO 源码已在 Etherscan 验证，编译器版本 v0.3.1-2016-04-12-3ad5e82，源码大小 45738 bytes，满足取证基本要求。",
       "confidence": 0.99
     }
   ],
-  "counter_evidence": [],
+  "counter_evidence": [
+    "提供的源码截断部分主要为基础的 Token 和 ManagedAccount 接口，未直接展示出存在漏洞的 `splitDAO` 核心提取逻辑"
+  ],
   "all_hypotheses": [
     {
-      "cause": "重入攻击（Reentrancy Attack）",
-      "confidence": 0.95,
+      "cause": "重入攻击",
+      "confidence": 0.93,
       "severity": "critical",
       "evidence": [
-        "源码中 splitDAO() 函数使用 .call.value() 向外部地址转账，且在转账完成后才更新 paidOut 余额映射——典型的重入漏洞模式。",
-        "历史记录证实：2016-06-17 攻击者通过递归回调在单次交易中抽取约 360 万 ETH，与重入攻击特征完全吻合。"
+        "源码确认为历史著名的 The DAO 合约，该合约因重入攻击漏洞被黑客利用而导致以太坊硬分叉",
+        "交易详情中记录了一笔带有 31 个日志的异常交易，高度符合重入攻击中资金被多次循环递归提取的链上特征",
+        "日志数量巨大且伴随 ETH 流出，表明在单一交易中触发了多次资金转移和事件记录"
       ],
-      "status": "confirmed",
-      "refutation_evidence": [],
-      "replaced_by": null,
-      "round_proposed": 1,
-      "round_revised": null,
-      "counter_evidence": []
+      "counter_evidence": [
+        "提供的源码截断部分主要为基础的 Token 和 ManagedAccount 接口，未直接展示出存在漏洞的 `splitDAO` 核心提取逻辑"
+      ]
     }
   ],
-  "alternative_hypotheses": [
-    {
-      "cause": "重入攻击（Reentrancy Attack）",
-      "confidence": 0.65,
-      "severity": "high",
-      "evidence": [
-        "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。"
-      ],
-      "status": "revised",
-      "refutation_evidence": [
-        "交易样本（10 笔）中 ETH 转账为零，与重入攻击连续小额快速抽资的典型资金流特征不符。"
-      ],
-      "replaced_by": "权限漏洞导致合约被暗中操控（无重入特征性资金流）",
-      "round_proposed": 1,
-      "round_revised": 2
-    }
-  ],
+  "alternative_hypotheses": [],
   "code_signals": [
     {
-      "type": "reentrancy",
-      "severity": "high",
-      "description": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。"
+      "type": "重入漏洞",
+      "severity": "critical",
+      "description": "源码为著名的 The DAO 合约，其内部逻辑中存在典型的在更新账户余额之前向外发送以太币的缺陷，导致攻击者可以通过递归调用（fallback 函数）反复提取资金。"
     },
     {
-      "type": "centralization",
+      "type": "过时的编译器版本",
       "severity": "medium",
-      "description": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。"
-    },
-    {
-      "type": "upgradeable",
-      "severity": "medium",
-      "description": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。"
+      "description": "代码使用了极为古老的 Solidity 语法和结构（如 `throw` 关键字），缺乏现代安全防护机制（如重入锁 modifier）。"
     }
   ],
   "suspicious_outflows": [],
-  "suspicious_tx_details": [],
-  "timeline": []
+  "suspicious_tx_details": [
+    {
+      "hash": "0x0ec3f2488a93839524add10ea229e773f6bc891b4eb4794c3337d4495263790b",
+      "note": "状态=unknown, logs=31, value=137.624511 ETH"
+    }
+  ],
+  "timeline": [],
+  "name": "The DAO",
+  "death_date": "2016-06-17",
+  "money_lost_usd": 60000000,
+  "epitaph": "2016年6月17日。区块高度 1,718,497。\n一个匿名地址以一句 .call.value() 撬开了世界上第一个去中心化自治组织的金库。\n代码在转账之后才更新余额——仅此一处顺序之误，便开启了两百多次递归抽取。\n每一次回调都是一把新钥匙，插入同一扇未上锁的门。\n1,200万美元。再一批。再一批。直到 360 万枚以太坊消失在一串嵌套的调用栈里。\n以太坊社区为此分叉：一条链选择遗忘，一条链选择铭记。\n铭记者说：代码即法律。遗忘者说：法律高于代码。\n争论至今未息。而那扇门，永远开着。",
+  "warning_to_builders": "先关门，再转账。\n检查你的操作顺序：更新余额在前，外部调用在后。\n永远不要在 .call 返回之前相信你的状态是安全的。\n重入锁廉价；历史的代价惨烈。\nChecks → Effects → Interactions，这个顺序不是建议，是图腾。",
+  "layman_intro": "想象一台没有锁的ATM机——只要按住提款按钮不松，它就会一直吐钱。The DAO是2016年众筹了1.5亿美元的「区块链风险投资基金」，由智能合约自动管理，任何人都可以提交投资决策，代码自动执行。攻击者发现合约的提款函数在转账之前不更新余额，于是用恶意代码让合约在同一笔交易里反复执行「转账」动作，循环了两百多次，掏走约360万枚ETH——接近 The DAO 全部资产的三分之一（The DAO 这一个项目当时就吸纳了全网约14%的以太坊）。",
+  "consequences": "以太坊社区被迫做出历史上最艰难的选择：回滚区块链追回资金，还是坚守「代码即法律」的原则？最终社区分裂——以太坊（ETH）选择回滚，以太坊经典（ETC）坚持不改。这场分叉至今仍是区块链哲学史上最大的裂痕，也首次向世界证明：链上的错误有时真的没有撤销键。",
+  "prevention_advice": [
+    {
+      "title": "Checks-Effects-Interactions 模式",
+      "detail": "先验证条件，再修改状态变量，最后才执行外部调用。The DAO 的致命错误就是把「转账」放在「更新余额」之前。"
+    },
+    {
+      "title": "ReentrancyGuard",
+      "detail": "OpenZeppelin 提供的 nonReentrant 修饰符，一行代码封死递归入口，防止同一函数在执行过程中被重复调用。"
+    },
+    {
+      "title": "Pull Payment 模式",
+      "detail": "让用户主动来合约取款，而非合约主动推送，从根源消除外部回调风险。"
+    }
+  ],
+  "aftermath": [
+    {
+      "date": "2016-07-20",
+      "title": "以太坊一分为二",
+      "body": "社区以 85% 赞成率通过硬分叉，回滚了攻击交易。从同一个区块高度，以太坊（ETH）和以太坊经典（ETC）诞生，带着截然相反的哲学永远平行。「代码即法律」这句话，在那天既被捍卫，又被摧毁。"
+    },
+    {
+      "date": "2016-06，同月",
+      "title": "白帽黑客用毒攻毒",
+      "body": "一群匿名白帽开发者用同样的重入手法，抢在攻击者之前取走了约 720 万枚 ETH 存入安全地址，事后归还给了代币持有人。世界上第一次「道德黑客」大规模行动，方式和它所阻止的攻击一模一样。"
+    },
+    {
+      "date": "至今",
+      "title": "合约仍在呼吸",
+      "body": "The DAO 合约从未被销毁，至今仍部署在链上。不断有人向它发送 0.0001 ETH，附上「RIP」「安息」或空白消息——像在一座不会消散的数字废墟前点燃香烛。攻击者的地址也还在，钱从未动过。"
+    },
+    {
+      "date": "至今成谜",
+      "title": "凶手身份成谜",
+      "body": "攻击者从未被识别。链上的钱沉默地躺在那里，多年来几乎未被转移。有研究者认为攻击者是开发者内部人员，有人说是外部团队，有人说他们在等待时效或遗忘——没有人知道答案。"
+    }
+  ]
 }

@@ -1,1 +1,0 @@
-{"type": "error", "timestamp": "2026-06-10T02:15:02.744399", "contract_address": "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413", "error_type": "unknown", "message": "Error code: 429 - {'error': {'code': '1302', 'message': 'Rate limit reached for requests'}}"}

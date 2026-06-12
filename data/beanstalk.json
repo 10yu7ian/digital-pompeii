@@ -1,20 +1,16 @@
 {
-  "id": "beanstalk",
-  "name": "Beanstalk",
-  "death_date": "2022-04-17",
-  "money_lost_usd": 182000000,
-  "epitaph": "2022年4月17日。一笔闪贷买下了整个共和国的投票权。\n攻击者借入 3.5 亿美元，换成协议治理代币，在同一个区块内召开了临时紧急大会。\n他提交了提案 BIP-18：将全部国库资产「捐献」给乌克兰人道主义救援。\n然后他在同一笔交易里，以绝对多数投票通过了它，立即执行，归还闪贷。\n1.82 亿美元在区块确认前消失。整个流程用时不到十三秒。\n这是历史上第一次，一个协议被它自己的民主制度所杀死。\n链上不撒谎：治理代码里，投票权与执行之间，没有等待，没有冷却，没有门槛。\n权力不需要代价，民主就只是一个可以被租赁一次的表演。",
-  "warning_to_builders": "治理权不能和经济利益共用同一个区块。\n闪贷可以在一个区块内让任何人成为你的最大股东。\n任何允许在同一区块 acquire → vote → execute 的治理设计，\n都是在用民主的外壳包裹着一个无锁的金库。\n投票需要时间锁。紧急提案需要多重验证。\n去中心化是目的，不是漏洞的借口。",
   "contract_address": "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5",
   "contract_name": "Diamond",
   "simulation_mode": false,
-  "hybrid_mode": true,
-  "death_cause": "闪贷治理攻击（Flash Loan Governance Attack）",
-  "confidence": 0.90,
+  "hybrid_mode": false,
+  "death_cause": "闪贷治理攻击",
+  "confidence": 0.75,
   "severity": "critical",
   "evidence": [
-    "检测到 delegatecall，Beanstalk 采用 Diamond 代理模式，治理模块与执行模块通过 delegatecall 共享状态。",
-    "历史记录证实：2022-04-17 攻击者通过闪贷控制 ~67% 投票权，在单个区块内提交并执行恶意治理提案，抽走全部协议资产约 1.82 亿美元。"
+    "upgrade_history 中的 prime_suspect_cut 自动锁定了真凶升级：该笔交易 cut_on 日期为 2022-04-17，交易哈希 0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7。",
+    "攻击者在升级时注入了未验证的恶意 init_contract (0xe5ecf73603d98a0128f05ed30506ac7a663dbb69) 执行任意代码。",
+    "该笔交易产生了异常高的 tx_log_count (121)，印证了攻击者在同块执行中大规模搬运并洗劫资产。",
+    "token_transfers 记录显示大量不同类型的 ERC-20 代币（如 BEAN, USDC, ARTEMIS 等）出现向特定地址（如 0xc1e088fc13...）的集中转移，符合利用恶意升级实施大规模盗窃的链上特征。"
   ],
   "technical_findings": [
     {
@@ -23,8 +19,8 @@
       "involved_addresses": [
         "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
       ],
-      "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
-      "confidence": 0.8
+      "reasoning": "合约采用 EIP-2535 钻石代理模式，fallback 函数通过 delegatecall 动态路由调用逻辑，高度依赖治理或管理员的权限控制。",
+      "confidence": 0.6
     },
     {
       "evidence_type": "code_vulnerability",
@@ -32,8 +28,17 @@
       "involved_addresses": [
         "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
       ],
-      "reasoning": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。",
-      "confidence": 0.6
+      "reasoning": "历史升级记录中存在未经验证的 init 合约，常被攻击者用于在初始化阶段植入并执行恶意的后门提款逻辑。",
+      "confidence": 0.9
+    },
+    {
+      "evidence_type": "on_chain_transaction",
+      "tx_hash": "0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7",
+      "involved_addresses": [
+        "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+      ],
+      "reasoning": "状态=success, logs=121, value=0.0 ETH",
+      "confidence": 0.75
     },
     {
       "evidence_type": "historical_record",
@@ -45,103 +50,100 @@
       "confidence": 0.99
     }
   ],
-  "counter_evidence": [],
+  "counter_evidence": [
+    "如果攻击者是通过闪贷借入治理代币获取了升级权限，event_logs 解码中可能缺乏明确的治理代币闪电贷借贷和投票事件，因此不能完全排除这只是单纯的私钥泄露引发的单次恶性提款。",
+    "虽然大量代币流向了 0xc1e088fc13...，但在调查不充分的情况下，无法 100% 排除这是项目方自身进行的极端情况下的资金硬迁移（尽管使用了未验证 init 合约极其反常）。",
+    "当前代理合约源码本身仅为标准 EIP-2535 路由模板，代码层面未暴露直接的提款漏洞，所有恶意行为均发生在外部未验证的 facet 或 init 合约中。"
+  ],
   "all_hypotheses": [
     {
-      "cause": "闪贷治理攻击（Flash Loan Governance Attack）",
-      "confidence": 0.90,
+      "cause": "闪贷治理攻击",
+      "confidence": 0.75,
       "severity": "critical",
       "evidence": [
-        "检测到 delegatecall，Beanstalk 采用 Diamond 代理模式，治理模块与执行模块通过 delegatecall 共享状态。",
-        "历史记录证实：2022-04-17 攻击者通过闪贷控制 ~67% 投票权，在单个区块内提交并执行恶意治理提案，抽走全部协议资产约 1.82 亿美元。"
+        "upgrade_history 中的 prime_suspect_cut 自动锁定了真凶升级：该笔交易 cut_on 日期为 2022-04-17，交易哈希 0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7。",
+        "攻击者在升级时注入了未验证的恶意 init_contract (0xe5ecf73603d98a0128f05ed30506ac7a663dbb69) 执行任意代码。",
+        "该笔交易产生了异常高的 tx_log_count (121)，印证了攻击者在同块执行中大规模搬运并洗劫资产。",
+        "token_transfers 记录显示大量不同类型的 ERC-20 代币（如 BEAN, USDC, ARTEMIS 等）出现向特定地址（如 0xc1e088fc13...）的集中转移，符合利用恶意升级实施大规模盗窃的链上特征。"
       ],
-      "status": "confirmed",
-      "refutation_evidence": [],
-      "replaced_by": null,
-      "round_proposed": 1,
-      "round_revised": null,
-      "counter_evidence": []
+      "counter_evidence": [
+        "如果攻击者是通过闪贷借入治理代币获取了升级权限，event_logs 解码中可能缺乏明确的治理代币闪电贷借贷和投票事件，因此不能完全排除这只是单纯的私钥泄露引发的单次恶性提款。",
+        "虽然大量代币流向了 0xc1e088fc13...，但在调查不充分的情况下，无法 100% 排除这是项目方自身进行的极端情况下的资金硬迁移（尽管使用了未验证 init 合约极其反常）。",
+        "当前代理合约源码本身仅为标准 EIP-2535 路由模板，代码层面未暴露直接的提款漏洞，所有恶意行为均发生在外部未验证的 facet 或 init 合约中。"
+      ]
+    },
+    {
+      "cause": "私钥泄露导致恶意升级",
+      "confidence": 0.5,
+      "severity": "high",
+      "evidence": [
+        "LibDiamond 库的 enforceIsContractOwner 函数要求只有合约所有者才能执行关键升级操作，恶意升级的成功执行暗示原管理员私钥可能已泄露。",
+        "代币转移样本呈现多笔大额资金单向流向同一接收地址，符合私钥泄露后攻击者直接调用特权功能提款的典型模式。"
+      ],
+      "counter_evidence": [
+        "如果攻击者是通过闪贷借入治理代币获取了升级权限，event_logs 解码中可能缺乏明确的治理代币闪电贷借贷和投票事件，因此不能完全排除这只是单纯的私钥泄露引发的单次恶性提款。",
+        "虽然大量代币流向了 0xc1e088fc13...，但在调查不充分的情况下，无法 100% 排除这是项目方自身进行的极端情况下的资金硬迁移（尽管使用了未验证 init 合约极其反常）。",
+        "当前代理合约源码本身仅为标准 EIP-2535 路由模板，代码层面未暴露直接的提款漏洞，所有恶意行为均发生在外部未验证的 facet 或 init 合约中。"
+      ]
     }
   ],
   "alternative_hypotheses": [],
   "code_signals": [
     {
-      "type": "delegatecall",
-      "severity": "high",
-      "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
+      "type": "Proxy Pattern",
+      "severity": "medium",
+      "description": "合约采用 EIP-2535 钻石代理模式，fallback 函数通过 delegatecall 动态路由调用逻辑，高度依赖治理或管理员的权限控制。"
     },
     {
-      "type": "centralization",
-      "severity": "medium",
-      "description": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。"
+      "type": "Unverified Contract Execution",
+      "severity": "critical",
+      "description": "历史升级记录中存在未经验证的 init 合约，常被攻击者用于在初始化阶段植入并执行恶意的后门提款逻辑。"
     }
   ],
   "suspicious_outflows": [],
-  "suspicious_tx_details": [],
-  "timeline": [
+  "suspicious_tx_details": [
     {
-      "hash": "0x144771e1d60db2db7e0b0a786805fe34299c335472920e9336c17e6afd718ed4",
-      "from": "0x43a9da9bade357843fbe7e5ee3eedd910f9fac1e",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1772074259"
+      "hash": "0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7",
+      "note": "状态=success, logs=121, value=0.0 ETH"
+    }
+  ],
+  "timeline": [],
+  "name": "Beanstalk",
+  "death_date": "2022-04-17",
+  "money_lost_usd": 182000000,
+  "epitaph": "2022年4月17日。一笔闪贷买下了整个共和国的投票权。\n前一天，攻击者已悄悄递交两份提案：BIP-18 把国库资产转给自己，BIP-19 向乌克兰捐款 25 万美元——后者只是让前者看起来「人畜无害」的烟雾弹。\n这一天，他借入约 10 亿美元闪贷，瞬间换成超过三分之二的治理代币，\n再借合约里一个叫 emergencyCommit 的紧急通道，以绝对多数投票通过了 BIP-18，立即执行，归还闪贷。\n1.82 亿美元在一个区块内蒸发，他净赚约 7600 万。\n这是历史上第一次，一个协议被它自己的民主制度所杀死。\n链上不撒谎：治理代码里，投票权与执行之间，门槛低到可以被租赁一次。\n权力不需要代价，民主就只是一场可以被买下的表演。",
+  "warning_to_builders": "治理权不能和经济利益共用同一个区块。\n闪贷可以在一个区块内让任何人成为你的最大股东。\n任何允许在同一区块 acquire → vote → execute 的治理设计，\n都是在用民主的外壳包裹着一个无锁的金库。\n投票需要时间锁。紧急提案需要多重验证。\n去中心化是目的，不是漏洞的借口。",
+  "layman_intro": "闪贷是DeFi里的「无抵押瞬间贷款」——借钱、用钱、还钱必须在同一个区块（约12秒）内完成，只要最后还上就不需要任何抵押。攻击者前一天先递交了两份提案：BIP-18「把全部国库转给自己」、BIP-19「向乌克兰捐款25万美元」作烟雾弹。第二天他用闪贷借入约10亿美元买入Beanstalk的治理代币，一瞬间拿到超过三分之二的投票权，再用合约的「紧急执行」通道把BIP-18强制通过、掏空国库、还款离场。这是历史上第一次，一个协议被它自己的民主制度所杀死。",
+  "consequences": "1.82亿美元蒸发，Beanstalk稳定币BEAN瞬间脱锚归零，协议实际死亡。此次攻击让整个DeFi行业意识到：链上投票权可以被「租用」一次。此后大量协议引入投票时间锁（Timelock）和快照机制，规定治理代币不能在同一区块内借入并立即用于投票，且提案通过后须等待48-72小时才能执行。",
+  "prevention_advice": [
+    {
+      "title": "投票时间锁（Timelock）",
+      "detail": "提案通过后须等待至少48小时才能执行，给社区时间发现并通过多签委员会紧急否决恶意提案。"
     },
     {
-      "hash": "0xe17c2117319cbd8ade7bd689731019aa85242716c2999ee52435af560b47f353",
-      "from": "0x82f402847051bddaab0f5d4b481417281837c424",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1769712071"
+      "title": "快照投票（Snapshot Voting）",
+      "detail": "用固定区块高度的余额快照计算投票权，闪贷在当前区块借入的代币余额不计入快照，无法参与本次投票。"
     },
     {
-      "hash": "0xbac01cb0d14ff789f530a729834fb24df293bf0777a7a1f30922766de6b5fb59",
-      "from": "0x750e762e3bf7afa113faacf5a8ec5c690a19d700",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1764694367"
+      "title": "禁止同块借贷投票",
+      "detail": "检测并拒绝在同一区块内发生「借入代币→投票→还款」操作的交易，从协议层封死闪贷攻击路径。"
+    }
+  ],
+  "aftermath": [
+    {
+      "date": "2022-04-17，攻击当日",
+      "title": "攻击者真的「捐了款」",
+      "body": "攻击者一口气递交了两份提案：BIP-18 把国库掏给自己，BIP-19 向乌克兰官方加密捐款地址汇去 25 万美元。后者既是掩护，也真的执行了——链上记录无法篡改，那笔 25 万美元捐款确实发生了。他从协议取走 1.82 亿美元，还清约 10 亿美元闪贷后，自己净赚约 7600 万美元。"
     },
     {
-      "hash": "0xa6f8d3621e8a26bae8661eb4b900a77554d87d7974248c55cc8cfbe8dea8e366",
-      "from": "0xcdea6a23b9383a88e246975ad3f38778ee0e81fc",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1759365875"
+      "date": "2022-08",
+      "title": "Beanstalk 死而复生",
+      "body": "协议在归零三个月后重新启动，引入了投票时间锁和紧急否决机制。BEAN 稳定币至今仍在运营，TVL 从巅峰时的约 1 亿美元重建至数千万级别——一个被彻底掏空的协议选择了原地复活。"
     },
     {
-      "hash": "0xf35ee9580d3b111b24c763f9208dfdef20c516f348845a8686916b2231d84aef",
-      "from": "0x63b98c09120e4ef75b4c122d79b39875f28a6fcc",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1758655487"
-    },
-    {
-      "hash": "0x3c86101ad7aee8952b0f848a5ec2cdad648e258b9241bc9de930ad2fec43169e",
-      "from": "0x4282341588f94c158bfaa40ae2c9f3abfdac647f",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1754841779"
-    },
-    {
-      "hash": "0xbc745e37389a9848c0074847408b30fc51ef99e26b91b7b44aa485f418daae53",
-      "from": "0x4088e870e785320413288c605fd1bd6bd9d5bdae",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1747674407"
-    },
-    {
-      "hash": "0xd80f5b2c1e72587e46c68378177c568faed55b02bdf0bb4a72f7fd20a5c18e90",
-      "from": "0x8d4122ffe442de3574871b9648868c1c3396a0af",
-      "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5",
-      "value_wei": 5000000000000000,
-      "value_eth": 0.005,
-      "timeStamp": "1740268319"
+      "date": "此后行业",
+      "title": "闪贷治理攻击成为标准考题",
+      "body": "Beanstalk 事件之后，「你的治理是否能防闪贷」成为每一个 DeFi 协议审计的必考项。Compound、Uniswap、Aave 等主流协议相继检视并强化了投票延迟机制。一次攻击，改写了行业的安全标准。"
     }
   ]
 }

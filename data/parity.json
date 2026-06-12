@@ -1,127 +1,117 @@
 {
-  "id": "parity",
-  "name": "Parity 多签钱包",
-  "death_date": "2017-11-06",
-  "money_lost_usd": 150000000,
-  "epitaph": "2017年11月6日。一个名叫 devops199 的账户发送了两笔交易。\n第一笔：initWallet()。他成为了一个被所有人遗忘的共享库合约的主人。\n第二笔：kill()。他解雇了自己，连同这个库一起。\n那个库是五百一十三个 Parity 多签钱包的心脏。心脏自毁。\n51 万 3774 枚以太坊——当时价值逾一亿五千万美元——在同一秒永远冻结。\n没有黑客动机。没有收益。只有一个可以被任何人调用的 initWallet，\n和一个没有守门人的 selfdestruct。\n死亡不总是来自恶意。有时候，它只是一扇没有锁的门。",
-  "warning_to_builders": "库合约不是工具，是依赖。\n不要将可初始化的共享库部署为可被任意调用的独立合约。\n初始化函数只能被调用一次；selfdestruct 只能被授权者触发。\n如果你的合约可以被陌生人「认领」，那它已经死了，只是还没意识到。\n每一个 delegatecall 的终点都应该有一扇上锁的门。",
-  "contract_address": "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4",
+  "contract_address": "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4",
   "contract_name": "WalletLibrary",
   "simulation_mode": false,
-  "hybrid_mode": true,
-  "death_cause": "库合约自毁冻结（Library Self-Destruct）",
-  "confidence": 0.90,
+  "hybrid_mode": false,
+  "death_cause": "库合约自毁导致资产冻结（攻击者接管权限并触发自毁）",
+  "confidence": 0.94,
   "severity": "critical",
   "evidence": [
-    "检测到 delegatecall，WalletLibrary 作为被代理的库合约，其自身的初始化函数缺乏访问控制。",
-    "历史记录证实：2017-11-06 用户 devops199 调用 initWallet() 获得库合约所有权后触发 kill()，导致依赖此库的 513 个多签钱包永久冻结。"
+    "selfdestruct_freeze 标记为 true，表明合约运行时代码已被清空，确认为自毁状态。",
+    "代码包含 initMultiowned 函数，且合约未在部署时强制构造器初始化，允许任何人接管所有权。",
+    "无 ETH 流出或 token_transfers，资产仍锁定在依赖该库的代理钱包中，符合资产冻结（非直接被盗）的特征。",
+    "事件模式完全符合 Parity WalletLibrary 历史事件：攻击者夺取库合约所有权后调用 selfdestruct，导致依赖其 delegatecall 的多签钱包永久瘫痪。"
   ],
   "technical_findings": [
     {
       "evidence_type": "code_vulnerability",
       "tx_hash": null,
       "involved_addresses": [
-        "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"
+        "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4"
       ],
-      "reasoning": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-      "confidence": 0.8
+      "reasoning": "合约包含 initMultiowned 初始化函数，虽然带有 only_uninitialized 修饰符，但若部署后未及时初始化，将被攻击者抢先调用以获取合约所有权。",
+      "confidence": 0.9
     },
     {
       "evidence_type": "code_vulnerability",
       "tx_hash": null,
       "involved_addresses": [
-        "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"
+        "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4"
       ],
-      "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
-      "confidence": 0.8
-    },
-    {
-      "evidence_type": "code_vulnerability",
-      "tx_hash": null,
-      "involved_addresses": [
-        "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"
-      ],
-      "reasoning": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。",
-      "confidence": 0.6
-    },
-    {
-      "evidence_type": "code_vulnerability",
-      "tx_hash": null,
-      "involved_addresses": [
-        "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"
-      ],
-      "reasoning": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。",
-      "confidence": 0.6
+      "reasoning": "合约（结合上下文与截断代码）包含自毁指令，拥有者可以触发 kill 清除合约 runtime 代码。",
+      "confidence": 0.9
     },
     {
       "evidence_type": "historical_record",
       "tx_hash": null,
       "involved_addresses": [
-        "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"
+        "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4"
       ],
       "reasoning": "合约 WalletLibrary 源码已在 Etherscan 验证，编译器版本 v0.4.10+commit.f0d539ae，源码大小 16725 bytes，满足取证基本要求。",
       "confidence": 0.99
     }
   ],
-  "counter_evidence": [],
+  "counter_evidence": [
+    "暂未发现可推翻该假设的反证，链上数据（无资金转移、自毁状态）和历史事实确证了资产冻结的根因。"
+  ],
   "all_hypotheses": [
     {
-      "cause": "库合约自毁冻结（Library Self-Destruct）",
-      "confidence": 0.90,
+      "cause": "库合约自毁导致资产冻结（攻击者接管权限并触发自毁）",
+      "confidence": 0.94,
       "severity": "critical",
       "evidence": [
-        "检测到 delegatecall，WalletLibrary 作为被代理的库合约，其自身的初始化函数缺乏访问控制。",
-        "历史记录证实：2017-11-06 用户 devops199 调用 initWallet() 获得库合约所有权后触发 kill()，导致依赖此库的 513 个多签钱包永久冻结。"
+        "selfdestruct_freeze 标记为 true，表明合约运行时代码已被清空，确认为自毁状态。",
+        "代码包含 initMultiowned 函数，且合约未在部署时强制构造器初始化，允许任何人接管所有权。",
+        "无 ETH 流出或 token_transfers，资产仍锁定在依赖该库的代理钱包中，符合资产冻结（非直接被盗）的特征。",
+        "事件模式完全符合 Parity WalletLibrary 历史事件：攻击者夺取库合约所有权后调用 selfdestruct，导致依赖其 delegatecall 的多签钱包永久瘫痪。"
       ],
-      "status": "confirmed",
-      "refutation_evidence": [],
-      "replaced_by": null,
-      "round_proposed": 1,
-      "round_revised": null,
-      "counter_evidence": []
+      "counter_evidence": [
+        "暂未发现可推翻该假设的反证，链上数据（无资金转移、自毁状态）和历史事实确证了资产冻结的根因。"
+      ]
     }
   ],
   "alternative_hypotheses": [],
   "code_signals": [
     {
-      "type": "reentrancy",
-      "severity": "high",
-      "description": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。"
+      "type": "Unprotected Initialization",
+      "severity": "critical",
+      "description": "合约包含 initMultiowned 初始化函数，虽然带有 only_uninitialized 修饰符，但若部署后未及时初始化，将被攻击者抢先调用以获取合约所有权。"
     },
     {
-      "type": "delegatecall",
-      "severity": "high",
-      "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
-    },
-    {
-      "type": "centralization",
-      "severity": "medium",
-      "description": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。"
-    },
-    {
-      "type": "upgradeable",
-      "severity": "medium",
-      "description": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。"
+      "type": "Selfdestruct/Kill Function",
+      "severity": "critical",
+      "description": "合约（结合上下文与截断代码）包含自毁指令，拥有者可以触发 kill 清除合约 runtime 代码。"
     }
   ],
   "suspicious_outflows": [],
   "suspicious_tx_details": [],
-  "timeline": [
+  "timeline": [],
+  "name": "Parity 多签钱包",
+  "death_date": "2017-11-06",
+  "money_lost_usd": 300000000,
+  "epitaph": "2017年11月6日。一个名叫 devops199 的账户发送了两笔交易。\n第一笔：initWallet()。他成为了一个被所有人遗忘的共享库合约的主人。\n第二笔：kill()。他解雇了自己，连同这个库一起。\n那个库是五百八十七个 Parity 多签钱包的心脏。心脏自毁。\n51 万 3774 枚以太坊——当时价值逾一亿五千万美元——在同一秒永远冻结。\n没有黑客动机。没有收益。只有一个可以被任何人调用的 initWallet，\n和一个没有守门人的 selfdestruct。\n死亡不总是来自恶意。有时候，它只是一扇没有锁的门。",
+  "warning_to_builders": "库合约不是工具，是依赖。\n不要将可初始化的共享库部署为可被任意调用的独立合约。\n初始化函数只能被调用一次；selfdestruct 只能被授权者触发。\n如果你的合约可以被陌生人「认领」，那它已经死了，只是还没意识到。\n每一个 delegatecall 的终点都应该有一扇上锁的门。",
+  "layman_intro": "Parity 是一个流行的「多人共管账户」工具——类似于需要多把钥匙才能打开的保险箱，被数百个项目用来保管巨额资金。2017年11月，一个匿名用户发现合约里有个没人认领的「超级管理员」权限，出于好奇点击了「认领」，然后又点了「销毁合约」，把587个钱包共用的底层库直接摧毁了。51万枚ETH从此永久冻结，没有任何人能取出，不是被偷走，而是被锁死。",
+  "consequences": "Parity公司发起EIP-999提案，希望通过以太坊协议升级来恢复冻结资金，但社区以「开创危险先例」为由否决。那51万枚ETH至今仍锁在合约里无法动用，成为区块链不可篡改性最贵的代价之一。此后行业形成共识：共享库合约不能含有自毁函数，初始化入口必须有一次性锁。",
+  "prevention_advice": [
     {
-      "hash": "0xf3fd3a732c6ab5b01aab9a790ae0d5bb1d1b596ba2bde06b1614d9959cbade47",
-      "from": "0x6c77cdea3fbc45ed819a9396610fb9e1d51bcd9a",
-      "to": "0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4",
-      "value_wei": 10000000000,
-      "value_eth": 0.0,
-      "timeStamp": "1663591367"
+      "title": "初始化一次性锁",
+      "detail": "用 OpenZeppelin 的 Initializable 合约确保 init 函数只能被调用一次，部署完成后任何人都无法再次\"认领\"所有权。"
     },
     {
-      "hash": "0x734cee3fd583daa11d54f18b23528ae79bb0c45dba9bf01061ce737c06e742e8",
-      "from": "0x1a776c84d64ecada985c968c3589b3c8615a1e7c",
-      "to": "0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4",
-      "value_wei": 100000000000000,
-      "value_eth": 0.0001,
-      "timeStamp": "1572964431"
+      "title": "库合约禁用 selfdestruct",
+      "detail": "被其他合约通过 delegatecall 依赖的库合约，绝对不应包含自毁逻辑；若必须有，须限定为多签授权触发。"
+    },
+    {
+      "title": "部署即初始化",
+      "detail": "将合约部署与初始化合并在同一笔交易中完成，杜绝部署后、初始化前这段时间窗口被抢占的可能。"
+    }
+  ],
+  "aftermath": [
+    {
+      "date": "2017-11-06，事发当晚",
+      "title": "devops199：「我是不是做了坏事？」",
+      "body": "事发后，devops199 在 GitHub issue 里留下一句话：「我是不是意外地杀死了它？」随后删除了账号，从互联网消失。没有勒索，没有声明，没有收益。他可能真的只是一个好奇点错了按钮的人。"
+    },
+    {
+      "date": "2018",
+      "title": "EIP-999：社区选择「让它死」",
+      "body": "Parity 提出 EIP-999，请求通过协议升级恢复冻结资金。以太坊核心开发者和社区以「开创危险先例」为由否决。那 51.3 万枚 ETH 永远留在了原地——不是被偷走，而是被自己的社区放弃了。"
+    },
+    {
+      "date": "至今",
+      "title": "被冻结的财富在升值",
+      "body": "那 513,774 枚 ETH 随价格上涨，账面价值曾一度超过 15 亿美元。它们静静地躺在一个没有人能触碰的地址里，是全链最昂贵的「不可动用资产」，也是对「代码即法律」最具讽刺意味的注脚。"
     }
   ]
 }

@@ -6,7 +6,7 @@ import {
 import ParticleField from "./ParticleField";
 import { useTilt } from "../hooks/useTilt";
 import { cases } from "../data/cases";
-import { PixelTombstone, PixelSkull, PixelGhost, PixelZombie, PixelCoffin } from "./PixelIcons";
+import { PixelGhost, PixelZombie } from "./PixelIcons";
 
 const OUT_BACK    = [0.34, 1.56, 0.64, 1];
 const INOUT_EXPO  = [0.87, 0, 0.13, 1];
@@ -29,7 +29,7 @@ function useCountUp(target, duration = 2400, active = false) {
       const p = Math.min((now - t0) / duration, 1);
       const e = p < 0.5
         ? 0.5 * Math.pow(2, 10 * (p * 2 - 1))
-        : 0.5 * (-Math.pow(2, -10 * ((p - 0.5) * 2 - 1)) + 2);
+        : 0.5 * (-Math.pow(2, -10 * ((p - 0.5) * 2)) + 2);
       setV(Math.round(target * e));
       if (p < 1) raf = requestAnimationFrame(tick);
     };
@@ -78,7 +78,7 @@ function StoneCard({ caseData, index, onSelect }) {
             <h3 className="font-playfair text-[17px] leading-snug" style={{ color: "#ede5d4", textShadow: "0 1px 8px rgba(0,0,0,0.8)" }}>
               {caseData.name}
             </h3>
-            <p className="font-mono-plex text-[17px] mt-auto" style={{ color: "rgba(255,255,255,0.50)" }}>
+            <p className="font-mono-plex text-[17px] mt-auto" style={{ color: "rgba(255,255,255,0.78)" }}>
               {loss} lost
             </p>
             <motion.div
@@ -96,7 +96,8 @@ function StoneCard({ caseData, index, onSelect }) {
 
 export default function Landing({ onEnter, onCheck }) {
   const [statsOn, setStatsOn] = useState(false);
-  const loss = useCountUp(2_100_000_000, 2600, statsOn);
+  const totalLost = cases.reduce((s, c) => s + (c.money_lost_usd || 0), 0);
+  const loss = useCountUp(totalLost, 2600, statsOn);
 
   const { scrollY } = useScroll();
   const scrollVel = useVelocity(scrollY);
@@ -126,62 +127,31 @@ export default function Landing({ onEnter, onCheck }) {
       }} />
 
       {/* pixel art decorations */}
-      <motion.div className="absolute left-6 bottom-[16%] hidden lg:block" style={{ perspective: "600px" }}>
-        <motion.div
-          initial={{ rotateX: 55, y: 30, opacity: 0 }} animate={{ rotateX: 0, y: 0, opacity: 0.55 }}
-          transition={{ delay: 1.6, duration: 1.2, ease: OUT_BACK }}
-          style={{ filter: "drop-shadow(0 0 14px rgba(196,136,42,0.22))" }}
-        ><PixelTombstone ps={6} /></motion.div>
-      </motion.div>
 
-      <motion.div className="absolute left-36 bottom-[12%] hidden lg:block" style={{ perspective: "500px" }}>
-        <motion.div
-          initial={{ rotateX: 55, y: 20, opacity: 0 }} animate={{ rotateX: 0, y: 0, opacity: 0.3 }}
-          transition={{ delay: 1.9, duration: 1.1, ease: OUT_BACK }}
-        ><PixelTombstone ps={4} /></motion.div>
-      </motion.div>
-
-      <motion.div className="absolute right-10 bottom-[14%] hidden lg:block"
-        style={{ perspective: "500px" }}>
-        <motion.div
-          initial={{ rotateX: 50, y: 25, opacity: 0 }} animate={{ rotateX: 0, y: 0, opacity: 0.45 }}
-          transition={{ delay: 1.8, duration: 1.2, ease: OUT_BACK }}
-          style={{ filter: "drop-shadow(0 0 10px rgba(90,60,140,0.2))" }}
-        ><PixelCoffin ps={6} /></motion.div>
-      </motion.div>
-
-      <motion.div className="absolute right-40 bottom-[12%] hidden xl:block"
-        initial={{ x: 20, opacity: 0 }} animate={{ x: 0, opacity: 0.38 }}
-        transition={{ delay: 2.1, duration: 1, ease: OUT_EXPO }}
-        style={{ filter: "drop-shadow(0 0 6px rgba(60,160,60,0.14))" }}
-      ><PixelZombie ps={5} /></motion.div>
-
+      {/* 漂浮的小鬼群 — 满页各处、大小错落、各自独立的漂移与忽明忽暗 */}
       {[
-        { cls: "left-[10%] top-[20%]", delay: 2.4, dur: 4.2, ps: 4 },
-        { cls: "right-[12%] top-[28%]", delay: 2.9, dur: 5.1, ps: 3 },
-      ].map(({ cls, delay, dur, ps }, i) => (
-        <motion.div key={i} className={`absolute ${cls} hidden xl:block`}
+        { cls: "left-[8%]  top-[17%]", ps: 9, op: 0.50, dx: 8,  dy: -16, delay: 2.2, dur: 6.5 },
+        { cls: "right-[19%] top-[32%]", ps: 9, op: 0.48, dx: -10, dy: -14, delay: 2.6, dur: 7.4 },  // 僵尸身后
+        { cls: "right-[7%]  top-[45%]", ps: 7, op: 0.42, dx: 7,  dy: -12, delay: 3.1, dur: 6.0 },  // 僵尸身旁
+        { cls: "left-[15%] top-[41%]", ps: 7, op: 0.40, dx: -6, dy: -13, delay: 2.9, dur: 6.8 },
+        { cls: "right-[32%] top-[13%]", ps: 6, op: 0.38, dx: 6,  dy: -10, delay: 3.4, dur: 5.6 },
+        { cls: "left-[27%] top-[61%]", ps: 8, op: 0.42, dx: -8, dy: -15, delay: 3.0, dur: 7.8 },
+        { cls: "right-[14%] top-[71%]", ps: 7, op: 0.38, dx: 9,  dy: -12, delay: 3.6, dur: 6.4 },
+        { cls: "left-[45%] top-[82%]", ps: 6, op: 0.34, dx: -5, dy: -11, delay: 4.0, dur: 5.9 },
+      ].map(({ cls, ps, op, dx, dy, delay, dur }, i) => (
+        <motion.div key={i} className={`absolute ${cls} hidden lg:block pointer-events-none`}
           initial={{ opacity: 0 }}
-          animate={{ opacity: [0, 0.38, 0.22, 0.38], y: [0, -10, 0, -7, 0] }}
-          transition={{ delay, duration: dur, repeat: Infinity, repeatType: "loop" }}
+          animate={{ opacity: [0, op, op * 0.7, op], y: [0, dy, 4, dy * 0.6, 0], x: [0, dx, dx * -0.6, dx * 0.4, 0] }}
+          transition={{ delay, duration: dur, repeat: Infinity, repeatType: "loop", ease: "easeInOut" }}
+          style={{ filter: "drop-shadow(0 0 13px rgba(180,210,255,0.26))" }}
         ><PixelGhost ps={ps} /></motion.div>
       ))}
 
-      <motion.div className="absolute left-[7%] top-[44%] hidden 2xl:block"
-        initial={{ opacity: 0 }} animate={{ opacity: 0.14 }}
-        transition={{ delay: 2.8, duration: 1.5 }}
-      ><PixelSkull ps={4} /></motion.div>
-
-      {[
-        { pos: "top-8 left-8",  text: "Z.AI · Web3 × Long-Horizon Task" },
-        { pos: "top-8 right-8", text: "Est. 2016 — 2022" },
-      ].map(({ pos, text }) => (
-        <motion.p key={pos}
-          initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-          transition={{ delay: 2.2, duration: 1.2 }}
-          className={`absolute ${pos} font-mono-plex text-[12px] tracking-[0.26em] text-zinc-700 uppercase hidden sm:block`}
-        >{text}</motion.p>
-      ))}
+      <motion.p
+        initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+        transition={{ delay: 2.2, duration: 1.2 }}
+        className="absolute top-8 right-8 font-mono-plex text-[12px] tracking-[0.26em] text-zinc-400 uppercase hidden sm:block"
+      >Est. 2016 — 2022</motion.p>
 
       {/* hero */}
       <div className="relative z-10 flex flex-col items-center justify-center flex-1 px-6 pt-24 pb-8">
@@ -219,10 +189,16 @@ export default function Landing({ onEnter, onCheck }) {
             className="mt-5 flex flex-col items-center gap-1.5"
           >
             <p className="font-mono-plex text-[17px] tracking-[0.22em]" style={{ color: "rgba(255,255,255,0.55)" }}>
-              一座链上灾难博物馆 &nbsp;&nbsp; AI 验尸官 · 策展人
+              一座链上灾难博物馆
             </p>
-            <p className="font-mono-plex text-[12px] tracking-[0.18em]" style={{ color: "rgba(255,255,255,0.42)" }}>
-              A Dark Museum of On-Chain Disasters &nbsp;&nbsp; AI Coroner · Curator
+            <p className="font-mono-plex text-[15px] tracking-[0.2em]" style={{ color: "rgba(255,255,255,0.68)" }}>
+              AI 验尸官 · 策展人
+            </p>
+            <p className="font-mono-plex text-[12px] tracking-[0.18em] mt-1" style={{ color: "rgba(255,255,255,0.58)" }}>
+              A Dark Museum of On-Chain Disasters
+            </p>
+            <p className="font-mono-plex text-[11px] tracking-[0.16em]" style={{ color: "rgba(255,255,255,0.54)" }}>
+              AI Coroner · Curator
             </p>
           </motion.div>
         </motion.div>
@@ -248,7 +224,7 @@ export default function Landing({ onEnter, onCheck }) {
           ].map(({ val, label, custom }, i) => (
             <div key={i} className="text-center">
               <p className="font-mono-plex text-2xl font-light" style={{ color: "#ede5d4" }}>{custom ?? val}</p>
-              <p className="font-mono-plex text-[12px] tracking-[0.22em] uppercase mt-1" style={{ color: "rgba(255,255,255,0.48)" }}>{label}</p>
+              <p className="font-mono-plex text-[12px] tracking-[0.22em] uppercase mt-1" style={{ color: "rgba(255,255,255,0.75)" }}>{label}</p>
             </div>
           )).reduce((acc, el, i) => [
             ...acc, el,
@@ -290,9 +266,9 @@ export default function Landing({ onEnter, onCheck }) {
           initial={{ opacity: 0 }} animate={{ opacity: 1 }}
           transition={{ delay: 3.0, duration: 1.5 }}
           className="mt-12 font-mono-plex text-[12px] tracking-[0.22em] uppercase"
-          style={{ color: "rgba(255,255,255,0.32)" }}
+          style={{ color: "rgba(255,255,255,0.62)" }}
         >
-          5 cases · 2016 – 2022 · $2.1B lost
+          {cases.length} cases · 2016 – 2022 · ${(totalLost / 1e9).toFixed(2)}B lost
         </motion.p>
       </div>
 
@@ -308,20 +284,38 @@ export default function Landing({ onEnter, onCheck }) {
           onClick={onCheck}
           whileHover={{ scale: 1.01, y: -2 }}
           whileTap={{ scale: 0.99 }}
-          className="rounded-2xl p-5 flex items-center justify-between gap-4 w-full text-left group"
+          className="relative rounded-2xl p-5 flex items-center justify-between gap-4 w-full text-left group"
           style={{
             background: "linear-gradient(135deg, rgba(52,211,153,0.07), rgba(16,185,129,0.03))",
             border: "1px solid rgba(52,211,153,0.18)",
             boxShadow: "0 0 40px rgba(52,211,153,0.04)",
           }}
         >
+          {/* 僵尸踩在卡片上边框线、绿箭头左上方 */}
+          <motion.div
+            className="hidden lg:block absolute top-0 right-[64px] -translate-y-full pointer-events-none z-10"
+            style={{ transformOrigin: "bottom center" }}
+            initial={{ y: 18, opacity: 0, rotate: -3 }}
+            animate={{ y: 0, opacity: 0.85, rotate: [0, 2, -1.5, 2, 0] }}
+            transition={{
+              y: { delay: 3.8, duration: 1.1, ease: OUT_BACK },
+              opacity: { delay: 3.8, duration: 1.1 },
+              rotate: { delay: 4.9, duration: 7, repeat: Infinity, ease: "easeInOut" },
+            }}
+          >
+            <div className="absolute left-1/2 bottom-0 -translate-x-1/2 w-[54px] h-2.5 rounded-[50%]"
+              style={{ background: "radial-gradient(ellipse, rgba(0,0,0,0.45), transparent 70%)", filter: "blur(3px)" }} />
+            <div style={{ filter: "drop-shadow(0 0 16px rgba(74,180,70,0.5)) drop-shadow(0 4px 6px rgba(0,0,0,0.6))" }}>
+              <PixelZombie ps={8} />
+            </div>
+          </motion.div>
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center gap-3">
               <span className="font-mono-plex text-[11px] tracking-[0.28em] uppercase" style={{ color: "rgba(52,211,153,0.6)" }}>
                 现已上线 · Live
               </span>
               <span className="font-mono-plex text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(52,211,153,0.1)", color: "rgba(52,211,153,0.7)", border: "1px solid rgba(52,211,153,0.2)" }}>
-                Web2 友好
+                Web3 新手入坑
               </span>
             </div>
             <p className="font-playfair text-[19px]" style={{ color: "rgba(180,255,220,0.8)" }}>
@@ -331,7 +325,7 @@ export default function Landing({ onEnter, onCheck }) {
               Project Health Check · AI Risk Screening
             </p>
             <p className="text-[13px] leading-relaxed mt-1" style={{ color: "rgba(180,220,200,0.62)" }}>
-              粘贴任意合约地址，AI 验尸官替你排查风险，用人话告诉你该不该入。
+              粘贴任意合约地址，AI 验尸官替你排查风险，用最简单的话告诉你该不该入。
             </p>
           </div>
           <div
@@ -355,8 +349,8 @@ export default function Landing({ onEnter, onCheck }) {
             <span className="font-mono-plex text-[17px] tracking-[0.28em] uppercase" style={{ color: "rgba(56,189,248,0.65)" }}>
               即将上线 · Coming Soon
             </span>
-            <span className="font-mono-plex text-[17px] px-2 py-0.5 rounded-full" style={{ background: "rgba(56,189,248,0.08)", color: "rgba(56,189,248,0.65)", border: "1px solid rgba(56,189,248,0.12)" }}>
-              🔒 Beta
+            <span className="font-mono-plex text-[17px] px-3 py-1.5 rounded-full inline-flex flex-col items-center justify-center text-center" style={{ background: "rgba(56,189,248,0.08)", color: "rgba(56,189,248,0.65)", border: "1px solid rgba(56,189,248,0.12)", lineHeight: "1.3" }}>
+              🔒<br/>Beta
             </span>
           </div>
           <div>
@@ -393,8 +387,8 @@ export default function Landing({ onEnter, onCheck }) {
             <span className="font-mono-plex text-[17px] tracking-[0.28em] uppercase" style={{ color: "rgba(196,136,42,0.65)" }}>
               持续更新 · Growing
             </span>
-            <span className="font-mono-plex text-[17px] px-2 py-0.5 rounded-full" style={{ background: "rgba(196,136,42,0.08)", color: "rgba(196,136,42,0.45)", border: "1px solid rgba(196,136,42,0.12)" }}>
-              5 cases
+            <span className="font-mono-plex text-[17px] px-3 py-1.5 rounded-full inline-flex flex-col items-center justify-center text-center" style={{ background: "rgba(196,136,42,0.08)", color: "rgba(196,136,42,0.45)", border: "1px solid rgba(196,136,42,0.12)", lineHeight: "1.3" }}>
+              5<br/>cases
             </span>
           </div>
           <div>

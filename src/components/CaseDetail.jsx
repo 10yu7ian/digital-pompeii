@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, useInView, AnimatePresence } from "framer-motion";
 import { PixelTombstone, PixelSkull, PixelScalpel, PixelWarning, PixelMagnify, PixelGhost } from "./PixelIcons";
 
@@ -243,7 +244,7 @@ export default function CaseDetail({ caseData }) {
   if (!caseData) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="font-mono-plex text-[17px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.42)" }}>
+        <p className="font-mono-plex text-[17px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.72)" }}>
           Select an exhibit
         </p>
       </div>
@@ -351,7 +352,7 @@ export default function CaseDetail({ caseData }) {
       {caseData.layman_intro && (
         <Reveal delay={0.03}>
           <Panel className="px-6 py-5">
-            <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase mb-3" style={{ color: "rgba(255,255,255,0.48)" }}>
+            <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase mb-3" style={{ color: "rgba(255,255,255,0.75)" }}>
               白话版 · In Plain Words
             </p>
             <p className="text-[16px] leading-[1.9]" style={{ color: "rgba(215,205,190,0.82)" }}>
@@ -445,7 +446,7 @@ export default function CaseDetail({ caseData }) {
                       {item.reasoning}
                     </p>
                     {item.tx_hash && (
-                      <p className="font-mono-plex text-[16px] break-all" style={{ color: "rgba(255,255,255,0.45)" }}>
+                      <p className="font-mono-plex text-[16px] break-all" style={{ color: "rgba(255,255,255,0.72)" }}>
                         <span className="mr-2" style={{ color: "rgba(255,255,255,0.2)" }}>tx</span>
                         <a href={`https://etherscan.io/tx/${item.tx_hash}`} target="_blank" rel="noopener noreferrer"
                           className="transition-colors duration-200" style={{ color: "rgba(56,189,248,0.6)" }}
@@ -567,7 +568,7 @@ export default function CaseDetail({ caseData }) {
           <div>
             <div className="flex items-center gap-3 mb-5">
               <PixelGhost ps={3} style={{ opacity: 0.5, filter: "drop-shadow(0 0 6px rgba(140,100,200,0.3))" }} />
-              <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.48)" }}>
+              <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.75)" }}>
                 余波 · Aftermath
               </p>
             </div>
@@ -607,7 +608,7 @@ export default function CaseDetail({ caseData }) {
           <div>
             <div className="flex items-center gap-3 mb-5">
               <PixelMagnify ps={3} style={{ opacity: 0.6, filter: "drop-shadow(0 0 6px rgba(56,189,248,0.2))" }} />
-              <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.48)" }}>
+              <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.75)" }}>
                 如何防范 · Prevention
               </p>
             </div>
@@ -644,7 +645,7 @@ export default function CaseDetail({ caseData }) {
           <Panel className="px-7 py-7">
             <div className="flex items-center gap-3 mb-5">
               <PixelWarning ps={3} style={{ opacity: 0.7, filter: "drop-shadow(0 0 6px rgba(240,176,32,0.35))" }} />
-              <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.48)" }}>
+              <p className="font-mono-plex text-[16px] tracking-[0.28em] uppercase" style={{ color: "rgba(255,255,255,0.75)" }}>
                 给后来者的警示 · Warning to Builders
               </p>
             </div>
@@ -693,10 +694,13 @@ export default function CaseDetail({ caseData }) {
         </div>
       </Reveal>
 
-      {/* modal */}
-      <AnimatePresence>
-        {showMedal && <MedalModal caseData={caseData} onClose={() => setShowMedal(false)} />}
-      </AnimatePresence>
+      {/* modal — 用 Portal 渲染到 body，避开带 transform/filter 的祖先导致 fixed 定位错乱 */}
+      {createPortal(
+        <AnimatePresence>
+          {showMedal && <MedalModal caseData={caseData} onClose={() => setShowMedal(false)} />}
+        </AnimatePresence>,
+        document.body
+      )}
 
     </article>
   );

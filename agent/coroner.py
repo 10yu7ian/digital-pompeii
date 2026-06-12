@@ -28,8 +28,8 @@ RUNS_DIR = PROJECT_ROOT / "runs"
 ETHERSCAN_API_URL = "https://api.etherscan.io/v2/api"
 ETHEREUM_CHAIN_ID = 1
 DEFAULT_TX_LIMIT = 10
-MAX_ROUNDS = 5                          # 工具调用最大轮次，防止死循环和 API 限流
-MAX_TX_DETAILS = 2                      # 每次调查最多深查几笔交易详情
+MAX_ROUNDS = 12                         # 工具调用最大轮次，防止死循环和 API 限流
+MAX_TX_DETAILS = 4                      # 每次调查最多深查几笔交易详情
 LARGE_VALUE_THRESHOLD_WEI = 1 * 10**18 # 可疑大额阈值（默认 1 ETH）
 
 # 调查推理模式。
@@ -37,9 +37,9 @@ SIMULATION_MODE: bool = False
 HYBRID_MODE: bool = False   # False = 全量 GLM 推理
 
 # GLM API 配置
-GLM_MODEL = "glm-4.7-flash"
-GLM_BASE_URL = "https://api.z.ai/api/paas/v4/"
-GLM_TIMEOUT_SECONDS = 60
+GLM_MODEL = "glm-5.1"
+GLM_BASE_URL = "https://api.z.ai/api/coding/paas/v4/"
+GLM_TIMEOUT_SECONDS = 180
 GLM_INTER_CALL_DELAY_SECONDS = 1        # 每次 GLM 调用后的固定间隔（防主动过快）
 AI_JSON_REPAIR_ATTEMPTS = 1
 
@@ -200,6 +200,167 @@ TOOL_SCHEMAS: List[Dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_event_logs",
+            "description": (
+                "获取合约发出的事件日志，自动识别已知事件签名（Upgraded/DiamondCut/治理事件等）。"
+                "治理攻击（如 Beanstalk）会触发治理事件；攻击触发的异常操作也会留下日志。"
+                "【重要】历史攻击在早期区块，默认 fromBlock=0 只会拿到最早的日志；"
+                "调查历史案例时必须传 start_date/end_date 定位到攻击区块，否则查不到攻击事件。"
+                "可选 topic0 精确过滤某类事件。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_address": {
+                        "type": "string",
+                        "description": "以 0x 开头的以太坊合约地址",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回的最大日志数，默认 50",
+                        "default": 50,
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "description": "可选，日志起始日期 YYYY-MM-DD（UTC）。调查历史攻击时强烈建议传入。",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "可选，日志结束日期 YYYY-MM-DD（UTC）。",
+                    },
+                    "topic0": {
+                        "type": "string",
+                        "description": "可选，事件签名哈希（keccak256），用于只取某一类事件。",
+                    },
+                },
+                "required": ["contract_address"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_token_transfers",
+            "description": (
+                "获取合约相关的 ERC-20 代币转账记录。"
+                "用于分析 token bridge 攻击（如 Nomad）、治理代币闪贷攻击（如 Beanstalk）、"
+                "协议代币被大量转出等情况。当 ETH 内部交易无异常但怀疑代币被盗时使用。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_address": {
+                        "type": "string",
+                        "description": "以 0x 开头的以太坊合约地址",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回的最大转账数，默认 50",
+                        "default": 50,
+                    },
+                },
+                "required": ["contract_address"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "resolve_proxy",
+            "description": (
+                "检测合约是否为代理合约（Diamond/TransparentProxy/UpgradeBeacon 等），"
+                "并自动解析出实现合约地址及其源码摘要。"
+                "当 get_contract_source 返回 ABI 为空、合约名为 Proxy/Diamond/Beacon、"
+                "或源码中含 delegatecall/fallback 逻辑时，必须调用此工具穿透到实现层。"
+                "实现合约才是真正的逻辑合约，代理合约本身无法反映漏洞所在。"
+                "可选 at_date：读取攻击当日历史存储槽，得到当时指向的实现合约（而非 latest 修复版）。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_address": {
+                        "type": "string",
+                        "description": "以 0x 开头的代理合约地址",
+                    },
+                    "at_date": {
+                        "type": "string",
+                        "description": "可选，攻击日期 YYYY-MM-DD（UTC）。读取该历史区块时的实现地址。",
+                    },
+                },
+                "required": ["contract_address"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_upgrade_history",
+            "description": (
+                "还原代理/可升级合约的「实现合约变更史」，是调查被升级过的历史案例的关键工具。"
+                "攻击后协议常被升级或迁移，get_contract_source / resolve_proxy 的 latest 结果"
+                "往往是「翻新后的废墟」（实现已替换、存储槽被清空）。本工具回放全部升级事件"
+                "（Diamond 的 DiamondCut、EIP-1967 代理的 Upgraded、UpgradeBeacon 的 Upgrade），"
+                "并标出攻击当时真正在任的实现合约/恶意 init 合约——那才是案发现场的代码，"
+                "再用 get_contract_source 读取该地址即可看到真实漏洞。"
+                "【务必传 at_date=攻击日期】Diamond 的日常 BIP 升级也会携带 init 合约，不传 at_date 无法"
+                "把范围收敛到攻击 cut；单实现代理不传 at_date 也无法定位攻击当时的实现。所以调用本工具时"
+                "应始终带上你已知或推断的攻击日期。"
+                "【触发条件】合约是代理/Diamond/Beacon，且 latest 源码或存储槽看起来异常空白/已翻新时必用。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_address": {
+                        "type": "string",
+                        "description": "以 0x 开头的代理/可升级合约地址",
+                    },
+                    "at_date": {
+                        "type": "string",
+                        "description": "可选，攻击日期 YYYY-MM-DD（UTC）。Diamond 会独立于此自动探测真凶 cut；"
+                                       "传入则额外给出该日期窗口内的治理 cut 作为辅助。建议填入你已知/推断的攻击日期。",
+                    },
+                },
+                "required": ["contract_address"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_transactions_by_date",
+            "description": (
+                "查询指定日期范围内合约的普通交易和大额内部交易，用于精准定位已知攻击日期的链上行为。"
+                "当已知或怀疑攻击发生在特定时间段时使用（如历史记录、新闻报道、链上异常日期）。"
+                "相比 get_transactions 只拉最新交易，此工具可直接定位到攻击发生的历史区块。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "contract_address": {
+                        "type": "string",
+                        "description": "以 0x 开头的合约地址",
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "description": "查询起始日期，格式 YYYY-MM-DD（UTC）",
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "查询结束日期，格式 YYYY-MM-DD（UTC）",
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "返回的最大交易数，默认 50",
+                        "default": 50,
+                    },
+                },
+                "required": ["contract_address", "start_date", "end_date"],
+            },
+        },
+    },
 ]
 
 
@@ -257,6 +418,66 @@ def _request_etherscan(params: Dict[str, Any]) -> Any:
     return result
 
 
+# ---------------------------------------------------------------------------
+# 共享工具：事件签名字典 + 日期换算
+# topic0 = keccak256(事件签名)。以下哈希均经链上真实日志交叉核对：
+#   Upgraded/AdminChanged — USDC 代理；DiamondCut — Beanstalk；Upgrade — Nomad UpgradeBeacon。
+# ---------------------------------------------------------------------------
+
+KNOWN_EVENT_SIGNATURES: Dict[str, str] = {
+    "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b": "Upgraded(address)",
+    "0x7e644d79422f17c01e4894b5f4f588d331ebfa28653d42ae832dc59e38c9798f": "AdminChanged(address,address)",
+    "0x1cf3b03a6cf19fa2baba4df148e9dcabedea7f8a5c07840e207e5c089be95d3e": "BeaconUpgraded(address)",
+    "0x8faa70878671ccd212d20771b795c50af8fd3ff6cf27f4bde57e5d4de0aeb673": "DiamondCut((address,uint8,bytes4[])[],address,bytes)",
+    "0xf78721226efe9a1bb678189a16d1554928b9f2192e2cb93eeda83b79fa40007d": "Upgrade(address)",  # Nomad UpgradeBeacon
+}
+
+# 标记「实现合约变更」的升级事件 topic0（用于代理升级考古）
+_UPGRADE_TOPICS = {
+    "0xbc7cd75a20ee27fd9adebab32041f755214dbc6bffa90cc0225b39da2e5c2d3b",  # Upgraded(address)
+    "0x1cf3b03a6cf19fa2baba4df148e9dcabedea7f8a5c07840e207e5c089be95d3e",  # BeaconUpgraded(address)
+    "0xf78721226efe9a1bb678189a16d1554928b9f2192e2cb93eeda83b79fa40007d",  # Upgrade(address) Nomad
+}
+_DIAMONDCUT_TOPIC = "0x8faa70878671ccd212d20771b795c50af8fd3ff6cf27f4bde57e5d4de0aeb673"
+
+
+def _date_to_block(date_str: str, closest: str = "before") -> Optional[int]:
+    """把 YYYY-MM-DD（UTC）转换成最接近的区块号，转换失败返回 None。"""
+    try:
+        dt = datetime.datetime.strptime(date_str.strip(), "%Y-%m-%d")
+        ts = int(dt.replace(tzinfo=datetime.timezone.utc).timestamp())
+        r = _request_etherscan({
+            "module": "block",
+            "action": "getblocknobytime",
+            "timestamp": str(ts),
+            "closest": closest,
+        })
+        return int(r) if r else None
+    except Exception:
+        return None
+
+
+def _looks_like_real_address(addr: str) -> bool:
+    """真实合约地址几乎不会有大量前导零；据此剔除 ABI 偏移量/小整数/预编译地址。"""
+    h = addr[2:] if addr.startswith("0x") else addr
+    if len(h) != 40 or h == "0" * 40:
+        return False
+    return (len(h) - len(h.lstrip("0"))) < 16   # 前导零 nibble < 16 视为真实地址
+
+
+def _addr_words_from_hex(hex_blob: str) -> List[str]:
+    """从一段 hex（事件 data 或 topic）中提取所有「右对齐地址」形态的 32 字节字。"""
+    h = hex_blob[2:] if hex_blob.startswith("0x") else hex_blob
+    out: List[str] = []
+    for i in range(0, len(h) - 63, 64):
+        w = h[i:i + 64]
+        if w[:24] == "0" * 24 and w[24:] != "0" * 40:
+            cand = "0x" + w[24:]
+            if cand not in out:
+                out.append(cand)
+    return out
+
+
 def get_contract_source(contract_address: str) -> Dict[str, Any]:
     """工具：从 Etherscan 拉取已验证合约源码和 ABI。"""
     result = _request_etherscan({
@@ -274,6 +495,22 @@ def get_contract_source(contract_address: str) -> Dict[str, Any]:
         abi = json.loads(abi_raw) if verified and abi_raw else []
     except json.JSONDecodeError:
         abi = abi_raw
+
+    # 检测合约是否已自毁：链上 runtime 代码为空 = 合约已被 selfdestruct 销毁。
+    # 对 Parity 式「库合约自毁冻结」是决定性证据——合约不存在，依赖它的钱包永久无法动用资金。
+    likely_selfdestructed = False
+    try:
+        code = _request_etherscan({
+            "module": "proxy", "action": "eth_getCode",
+            "address": contract_address, "tag": "latest",
+        })
+        likely_selfdestructed = isinstance(code, str) and code in ("0x", "0x0", "")
+    except Exception:
+        pass
+
+    src_lower = source_code.lower()
+    has_selfdestruct_code = any(k in src_lower for k in ("selfdestruct", "suicide", "function kill"))
+
     return {
         "address": contract_address,
         "verified": verified,
@@ -282,6 +519,8 @@ def get_contract_source(contract_address: str) -> Dict[str, Any]:
         "optimization_used": info.get("OptimizationUsed"),
         "source_code": source_code,
         "abi": abi,
+        "likely_selfdestructed": likely_selfdestructed,
+        "has_selfdestruct_code": has_selfdestruct_code,
     }
 
 
@@ -434,6 +673,641 @@ def get_large_outflows(
     }
 
 
+def get_event_logs(
+    contract_address: str,
+    limit: int = 50,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    topic0: Optional[str] = None,
+) -> Dict[str, Any]:
+    """工具：获取合约发出的事件日志（治理事件、升级事件、攻击触发事件等）。
+    可选按日期范围（YYYY-MM-DD，UTC）和 topic0 过滤；自动识别已知事件签名。
+    历史攻击发生在早期区块，务必传 start_date/end_date 定位到攻击区块，否则只会拿到最早的日志。
+    """
+    try:
+        params: Dict[str, Any] = {
+            "module": "logs",
+            "action": "getLogs",
+            "address": contract_address,
+            "fromBlock": str(_date_to_block(start_date, "before") or 0) if start_date else "0",
+            "toBlock": str(_date_to_block(end_date, "after") or "latest") if end_date else "latest",
+            "page": 1,
+            "offset": limit,
+        }
+        if topic0:
+            params["topic0"] = topic0
+        result = _request_etherscan(params)
+        logs = result if isinstance(result, list) else []
+        parsed = []
+        decoded_counts: Dict[str, int] = {}
+        for log in logs[:limit]:
+            topics = log.get("topics", [])
+            t0 = topics[0] if topics else None
+            event_name = KNOWN_EVENT_SIGNATURES.get(t0) if t0 else None
+            if event_name:
+                decoded_counts[event_name] = decoded_counts.get(event_name, 0) + 1
+            # 对升级/治理类事件，额外抽出 data/topics 中的地址（实现合约、init 合约等）
+            related = _addr_words_from_hex("".join(topics[1:]) + log.get("data", ""))
+            parsed.append({
+                "tx_hash": log.get("transactionHash", ""),
+                "block": int(log.get("blockNumber", "0x0"), 16),
+                "topic0": t0,
+                "event": event_name or "unknown",
+                "topics_count": len(topics),
+                "related_addresses": related[:4] or None,
+                "timeStamp": log.get("timeStamp"),
+            })
+        return {
+            "log_count": len(parsed),
+            "decoded_event_summary": decoded_counts or None,
+            "logs": parsed,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "log_count": 0, "logs": []}
+
+
+def get_token_transfers(contract_address: str, limit: int = 50) -> Dict[str, Any]:
+    """工具：获取合约相关的 ERC-20 代币转账记录（用于 token bridge / 治理代币攻击分析）。"""
+    try:
+        desc = _request_etherscan({
+            "module": "account",
+            "action": "tokentx",
+            "address": contract_address,
+            "sort": "desc",
+            "page": 1,
+            "offset": limit,
+        })
+        asc = _request_etherscan({
+            "module": "account",
+            "action": "tokentx",
+            "address": contract_address,
+            "sort": "asc",
+            "page": 1,
+            "offset": limit,
+        })
+        all_txs = [
+            *(desc if isinstance(desc, list) else []),
+            *(asc if isinstance(asc, list) else []),
+        ]
+        seen: set = set()
+        deduped = [t for t in all_txs if not (t["hash"] in seen or seen.add(t["hash"]))]
+
+        # 按代币聚合
+        token_summary: Dict[str, Dict] = {}
+        for tx in deduped:
+            sym = tx.get("tokenSymbol", "UNKNOWN")
+            if sym not in token_summary:
+                token_summary[sym] = {"symbol": sym, "tx_count": 0, "unique_addresses": set()}
+            token_summary[sym]["tx_count"] += 1
+            token_summary[sym]["unique_addresses"].add(tx.get("from", ""))
+            token_summary[sym]["unique_addresses"].add(tx.get("to", ""))
+
+        summary = [
+            {"symbol": v["symbol"], "tx_count": v["tx_count"], "unique_addresses": len(v["unique_addresses"])}
+            for v in token_summary.values()
+        ]
+        summary.sort(key=lambda x: x["tx_count"], reverse=True)
+
+        # 大额单笔样本
+        samples = []
+        for tx in deduped[:10]:
+            try:
+                val = int(tx.get("value", "0")) / (10 ** int(tx.get("tokenDecimal", "18")))
+            except Exception:
+                val = 0
+            samples.append({
+                "hash": tx.get("hash", "")[:20] + "...",
+                "token": tx.get("tokenSymbol"),
+                "value": round(val, 4),
+                "from": tx.get("from", "")[:12] + "...",
+                "to": tx.get("to", "")[:12] + "...",
+                "timeStamp": tx.get("timeStamp"),
+            })
+
+        return {
+            "total_transfers": len(deduped),
+            "token_summary": summary[:8],
+            "samples": samples,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "total_transfers": 0, "token_summary": [], "samples": []}
+
+
+def resolve_proxy(contract_address: str, at_date: Optional[str] = None) -> Dict[str, Any]:
+    """工具：检测合约是否为代理/升级合约，并解析出实现合约地址及其源码。
+    适用于 Diamond、TransparentUpgradeableProxy、UpgradeBeaconProxy 等模式。
+    当 Etherscan 没有登记实现地址时，自动读取 EIP-1967 链上存储槽。
+    可选 at_date（YYYY-MM-DD，UTC）：读取该历史区块时的存储槽，得到攻击当时指向的实现合约
+    （而非 latest 的修复版）。若怀疑协议在攻击后被升级，优先配合 get_upgrade_history 使用。
+    """
+    # EIP-1967 标准存储槽
+    _IMPL_SLOT   = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc"
+    _BEACON_SLOT = "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50"
+
+    # at_date → 历史区块 tag（十六进制）；默认 latest
+    _slot_tag = "latest"
+    if at_date:
+        _blk = _date_to_block(at_date, "before")
+        if _blk:
+            _slot_tag = hex(_blk)
+
+    def _read_slot(addr: str, slot: str) -> Optional[str]:
+        """读取合约存储槽，返回 0x 开头的地址字符串，读不到返回 None。"""
+        try:
+            raw = _request_etherscan({
+                "module": "proxy",
+                "action": "eth_getStorageAt",
+                "address": addr,
+                "position": slot,
+                "tag": _slot_tag,
+            })
+            if not isinstance(raw, str) or raw in ("0x", "0x" + "0" * 64):
+                return None
+            # 存储槽返回 32 字节，地址在最后 20 字节
+            padded = raw.replace("0x", "").zfill(64)
+            candidate = "0x" + padded[-40:]
+            return candidate if candidate != "0x" + "0" * 40 else None
+        except Exception:
+            return None
+
+    def _fetch_impl_source(addr: str) -> Dict[str, Any]:
+        """获取实现合约源码摘要。"""
+        r = _request_etherscan({
+            "module": "contract",
+            "action": "getsourcecode",
+            "address": addr,
+        })
+        info = r[0] if isinstance(r, list) and r else {}
+        src = info.get("SourceCode", "")
+        verified = bool(src) and info.get("ABI", "") != "Contract source code not verified"
+        return {
+            "implementation_address": addr,
+            "implementation_name": info.get("ContractName", ""),
+            "implementation_verified": verified,
+            "implementation_source_size": len(src),
+            "implementation_compiler": info.get("CompilerVersion", ""),
+        }
+
+    # Step 1: Etherscan getsourcecode（快速路径）
+    result = _request_etherscan({
+        "module": "contract",
+        "action": "getsourcecode",
+        "address": contract_address,
+    })
+    if not isinstance(result, list) or not result:
+        return {"is_proxy": False, "error": "无法获取合约信息"}
+
+    info = result[0]
+    impl_address: str = info.get("Implementation", "").strip()
+    source = info.get("SourceCode", "").lower()
+
+    # 判断代理类型
+    if "diamond" in source or "facet" in source:
+        proxy_type = "Diamond (EIP-2535)"
+    elif "upgradebeacon" in source or "beacon" in source:
+        proxy_type = "UpgradeBeacon (EIP-1967)"
+    elif "transparentupgradeableproxy" in source or "transparent" in source:
+        proxy_type = "TransparentUpgradeableProxy (EIP-1967)"
+    elif "uups" in source:
+        proxy_type = "UUPS (EIP-1822)"
+    elif impl_address:
+        proxy_type = "Unknown Proxy"
+    else:
+        proxy_type = ""
+
+    # Step 2: 若 Etherscan 没有登记，尝试读链上存储槽
+    slot_method = None
+    if not impl_address:
+        # 先试 EIP-1967 直接实现槽
+        impl_address = _read_slot(contract_address, _IMPL_SLOT) or ""
+        if impl_address:
+            slot_method = "EIP-1967 implementation slot"
+            if not proxy_type:
+                proxy_type = "EIP-1967 Proxy"
+        else:
+            # 再试 Beacon 槽：先拿 beacon 地址，再从 beacon 读实现
+            beacon_address = _read_slot(contract_address, _BEACON_SLOT)
+            if beacon_address:
+                slot_method = "EIP-1967 beacon slot"
+                if not proxy_type:
+                    proxy_type = "UpgradeBeacon (EIP-1967)"
+                # beacon 合约的 implementation 通常在 slot 0
+                impl_from_beacon = _read_slot(beacon_address, "0x0")
+                if impl_from_beacon:
+                    impl_address = impl_from_beacon
+                    slot_method += " → beacon slot 0"
+                else:
+                    # 有些 beacon 用 EIP-1967 实现槽
+                    impl_from_beacon2 = _read_slot(beacon_address, _IMPL_SLOT)
+                    if impl_from_beacon2:
+                        impl_address = impl_from_beacon2
+                        slot_method += " → beacon EIP-1967 slot"
+
+    if not impl_address:
+        return {
+            "is_proxy": bool(proxy_type),
+            "proxy_type": proxy_type or "unknown",
+            "implementation_address": None,
+            "slot_method": None,
+            "note": "链上存储槽未检测到实现合约地址，该代理模式可能使用非标准存储布局。",
+        }
+
+    # Step 3: 拉取实现合约源码
+    impl_info = _fetch_impl_source(impl_address)
+    note = (
+        f"实现合约已验证，源码大小 {impl_info['implementation_source_size']} bytes。"
+        if impl_info["implementation_verified"]
+        else "实现合约源码未验证，建议结合 get_event_logs 和 get_token_transfers 进行链上行为分析。"
+    )
+
+    return {
+        "is_proxy": True,
+        "proxy_type": proxy_type or "Unknown Proxy",
+        "proxy_address": contract_address,
+        "resolution_method": slot_method or "Etherscan Implementation field",
+        "read_at": _slot_tag,
+        **impl_info,
+        "note": note,
+    }
+
+
+def get_transactions_by_date(
+    contract_address: str,
+    start_date: str,
+    end_date: str,
+    limit: int = 50,
+) -> Dict[str, Any]:
+    """工具：查询特定日期范围内的合约交易，用于定位已知攻击发生日期附近的链上行为。
+    start_date / end_date 格式：YYYY-MM-DD（UTC）。
+    """
+    import datetime
+
+    def _date_to_timestamp(date_str: str) -> int:
+        dt = datetime.datetime.strptime(date_str.strip(), "%Y-%m-%d")
+        return int(dt.replace(tzinfo=datetime.timezone.utc).timestamp())
+
+    def _timestamp_to_block(ts: int, closest: str = "before") -> Optional[int]:
+        try:
+            r = _request_etherscan({
+                "module": "block",
+                "action": "getblocknobytime",
+                "timestamp": str(ts),
+                "closest": closest,
+            })
+            return int(r) if r else None
+        except Exception:
+            return None
+
+    try:
+        ts_start = _date_to_timestamp(start_date)
+        ts_end = _date_to_timestamp(end_date) + 86399  # 包含当天末尾
+
+        start_block = _timestamp_to_block(ts_start, "after") or 0
+        end_block = _timestamp_to_block(ts_end, "before") or 99999999
+
+        txs = _request_etherscan({
+            "module": "account",
+            "action": "txlist",
+            "address": contract_address,
+            "startblock": start_block,
+            "endblock": end_block,
+            "page": 1,
+            "offset": min(limit, 100),
+            "sort": "asc",
+        })
+
+        if isinstance(txs, str) and "No transactions found" in txs:
+            txs = []
+        if not isinstance(txs, list):
+            txs = []
+
+        # 同步查内部交易（资金流）
+        internal = _request_etherscan({
+            "module": "account",
+            "action": "txlistinternal",
+            "address": contract_address,
+            "startblock": start_block,
+            "endblock": end_block,
+            "page": 1,
+            "offset": min(limit, 100),
+            "sort": "asc",
+        })
+        if not isinstance(internal, list):
+            internal = []
+
+        # 过滤大额内部交易
+        large_internal = [
+            {
+                "hash": t.get("hash"),
+                "from": t.get("from"),
+                "to": t.get("to"),
+                "value_eth": round(int(t.get("value", "0")) / 1e18, 4),
+                "timeStamp": t.get("timeStamp"),
+            }
+            for t in internal
+            if int(t.get("value", "0")) >= int(1e17)  # >= 0.1 ETH
+        ]
+
+        samples = [
+            {
+                "hash": t.get("hash", "")[:20] + "...",
+                "from": t.get("from", "")[:12] + "...",
+                "to": t.get("to", "")[:12] + "...",
+                "value_eth": round(int(t.get("value", "0")) / 1e18, 6),
+                "method": t.get("input", "0x")[:10],
+                "timeStamp": t.get("timeStamp"),
+            }
+            for t in txs[:20]
+        ]
+
+        return {
+            "date_range": f"{start_date} → {end_date}",
+            "block_range": f"{start_block} → {end_block}",
+            "tx_count": len(txs),
+            "internal_tx_count": len(internal),
+            "large_internal_outflows": large_internal[:20],
+            "tx_samples": samples,
+        }
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def _decode_upgrade_log(address: str, lg: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """把一条原始日志解析成升级事件记录；非升级事件返回 None。"""
+    topics = lg.get("topics", [])
+    t0 = topics[0] if topics else None
+    if t0 not in _UPGRADE_TOPICS and t0 != _DIAMONDCUT_TOPIC:
+        return None
+    data = lg.get("data", "")
+    is_diamond_cut = (t0 == _DIAMONDCUT_TOPIC)
+    if is_diamond_cut:
+        # DiamondCut(FacetCut[] _diamondCut, address _init, bytes _calldata)
+        # 三者均非 indexed，全在 data 里；_init 固定为第 1 个字。
+        # 真实 _init 合约 = 治理在升级时执行任意代码（恶意 cut 的标志）；偏移量小整数则视为常规 cut。
+        h = data[2:] if data.startswith("0x") else data
+        init_addr = "0x" + h[64:128][24:] if len(h) >= 128 else ""
+        impls = [init_addr] if _looks_like_real_address(init_addr) else []
+    else:
+        # Upgraded/BeaconUpgraded/Upgrade：实现地址在 indexed topic1
+        impls = [("0x" + t[-40:]) for t in topics[1:] if _looks_like_real_address("0x" + t[-40:])] \
+            or [a for a in _addr_words_from_hex(data) if _looks_like_real_address(a)]
+    try:
+        ts = int(lg.get("timeStamp", "0x0"), 16)
+        date = datetime.datetime.utcfromtimestamp(ts).strftime("%Y-%m-%d")
+    except Exception:
+        ts, date = 0, ""
+    return {
+        "event": KNOWN_EVENT_SIGNATURES.get(t0, "unknown"),
+        "is_diamond_cut": is_diamond_cut,
+        "emitter": address,
+        "block": int(lg.get("blockNumber", "0x0"), 16),
+        "date": date,
+        "timestamp": ts,
+        "tx_hash": lg.get("transactionHash", ""),
+        "implementation_candidates": impls[:4],
+    }
+
+
+def _pull_upgrade_events(address: str, limit: int = 100) -> List[Dict[str, Any]]:
+    """拉取某地址上所有升级类事件（Upgraded/BeaconUpgraded/Upgrade/DiamondCut），按区块升序。
+    按 topic0 在服务端逐类查询，避免高频合约（如 Diamond）的升级事件被无关日志淹没。
+    """
+    events: List[Dict[str, Any]] = []
+    seen: set = set()
+    for topic in (*_UPGRADE_TOPICS, _DIAMONDCUT_TOPIC):
+        try:
+            logs = _request_etherscan({
+                "module": "logs", "action": "getLogs", "address": address,
+                "fromBlock": "0", "toBlock": "latest",
+                "topic0": topic, "page": 1, "offset": limit,
+            })
+        except Exception:
+            logs = []
+        if not isinstance(logs, list):
+            continue
+        for lg in logs:
+            key = (lg.get("transactionHash", ""), lg.get("logIndex", ""))
+            if key in seen:
+                continue
+            seen.add(key)
+            rec = _decode_upgrade_log(address, lg)
+            if rec:
+                events.append(rec)
+    events.sort(key=lambda e: e["block"])
+    return events
+
+
+def _find_beacon(contract_address: str) -> Optional[str]:
+    """定位 beacon 地址：先读 EIP-1967 beacon 槽，失败则扫部署字节码里的 PUSH32 immutable。"""
+    _BEACON_SLOT = "0xa3f0ad74e5423aebfd80d3ef4346578335a9a72aeaee59ff6cb3582b35133d50"
+    try:
+        raw = _request_etherscan({
+            "module": "proxy", "action": "eth_getStorageAt",
+            "address": contract_address, "position": _BEACON_SLOT, "tag": "latest",
+        })
+        if isinstance(raw, str) and raw not in ("0x", "0x" + "0" * 64):
+            cand = "0x" + raw.replace("0x", "").zfill(64)[-40:]
+            if cand != "0x" + "0" * 40:
+                return cand
+    except Exception:
+        pass
+    # fallback：Nomad 式 immutable beacon —— 扫运行时字节码的 PUSH32 操作数末 20 字节
+    try:
+        code = _request_etherscan({
+            "module": "proxy", "action": "eth_getCode",
+            "address": contract_address, "tag": "latest",
+        })
+        if not isinstance(code, str):
+            return None
+        b = bytes.fromhex(code[2:])
+        i = 0
+        while i < len(b):
+            op = b[i]
+            if op == 0x7f and i + 33 <= len(b):           # PUSH32
+                cand = "0x" + b[i + 13:i + 33].hex()      # 32 字节字的末 20 字节
+                if cand != "0x" + "0" * 40 and _pull_upgrade_events(cand, limit=20):
+                    return cand
+                i += 33
+            elif 0x60 <= op <= 0x7f:                       # 其它 PUSHn，跳过操作数
+                i += op - 0x5f + 1
+            else:
+                i += 1
+    except Exception:
+        pass
+    return None
+
+
+def _contract_source_brief(addr: str) -> Dict[str, Any]:
+    """获取合约源码摘要（地址 / 名称 / 是否已验证 / 源码大小）。"""
+    try:
+        r = _request_etherscan({
+            "module": "contract", "action": "getsourcecode", "address": addr,
+        })
+        info = r[0] if isinstance(r, list) and r else {}
+        src = info.get("SourceCode", "")
+        return {
+            "address": addr,
+            "contract_name": info.get("ContractName", ""),
+            "verified": bool(src) and info.get("ABI", "") != "Contract source code not verified",
+            "source_size": len(src),
+        }
+    except Exception:
+        return {"address": addr, "verified": False, "source_size": 0}
+
+
+def _diamond_prime_suspect(with_init: List[Dict[str, Any]], max_checks: int = 120) -> Optional[Dict[str, Any]]:
+    """在「携带真实 init 合约的 DiamondCut」中锁定真正的攻击 cut，不依赖 at_date。
+    判别逻辑：攻击者的 init 合约通常未在 Etherscan 验证源码（unverified），且该 cut 的交易会因
+    搬运大量资产而产生远超日常升级的事件日志数（闪贷掏空 → 大量 Transfer 事件）。
+    先用「init 未验证」把候选从全部 cut 收敛到极少数，再按 cut 交易的 logs_count 取最高者。
+    这样即使 agent 把攻击日期猜错，也能由资金/日志足迹自动纠正到真正的攻击 cut。"""
+    unverified = []
+    for e in with_init[:max_checks]:
+        init = e["implementation_candidates"][0]
+        if not _contract_source_brief(init)["verified"]:
+            unverified.append(e)
+    if not unverified:
+        return None
+    scored = []
+    for e in unverified:
+        try:
+            d = get_tx_detail(e["tx_hash"])
+            logs = d.get("logs_count", 0) if isinstance(d, dict) else 0
+        except Exception:
+            logs = 0
+        scored.append((logs, e))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top_logs, top = scored[0]
+    return {
+        "cut_on": top["date"],
+        "tx_hash": top["tx_hash"],
+        "init_contract": top["implementation_candidates"][0],
+        "init_source": _contract_source_brief(top["implementation_candidates"][0]),
+        "tx_log_count": top_logs,
+        "detection": "date-independent：init 未验证 + 该 cut 交易日志数最高（搬运大量资产），由链上足迹自动锁定",
+        "hint": "用 get_tx_detail 查 tx_hash、get_contract_source 读 init_contract——这极可能是攻击者植入的恶意提款逻辑。",
+    }
+
+
+def get_upgrade_history(contract_address: str, at_date: Optional[str] = None) -> Dict[str, Any]:
+    """工具：还原代理/可升级合约的「实现合约变更史」。
+    对 Diamond（DiamondCut）、EIP-1967 透明/UUPS 代理（Upgraded）、UpgradeBeacon（Upgrade/BeaconUpgraded）
+    均适用。攻击后协议常被升级，latest 看到的是「翻新后的废墟」；本工具回放升级时间线，
+    并在给定 at_date（攻击日期，YYYY-MM-DD）时标出当时真正在任的实现合约——那才是案发现场的代码。
+    对 Diamond 还会独立于 at_date 自动探测「真凶 cut」（携带未验证 init 且交易日志数最高者）。
+    """
+    timeline = _pull_upgrade_events(contract_address)
+    beacon = None
+    # 代理本身无升级事件时，多半是 beacon proxy —— 升级事件发在 beacon 上
+    if not timeline:
+        beacon = _find_beacon(contract_address)
+        if beacon:
+            timeline = _pull_upgrade_events(beacon)
+
+    if not timeline:
+        return {
+            "is_upgradeable": False,
+            "beacon_address": beacon,
+            "note": "未发现标准升级事件。可能是不可升级合约，或使用非标准升级机制。",
+            "upgrade_timeline": [],
+        }
+
+    is_diamond = any(e.get("is_diamond_cut") for e in timeline)
+
+    cutoff = None
+    if at_date:
+        try:
+            cutoff = datetime.datetime.strptime(at_date.strip(), "%Y-%m-%d").replace(
+                tzinfo=datetime.timezone.utc).timestamp()
+        except Exception:
+            cutoff = None
+
+    active_at_attack = None      # 单实现代理（Nomad 式）：攻击日在任实现
+    impl_source = None
+    suspicious_cuts = None       # Diamond（Beanstalk 式）：攻击日前后携带真实 _init 合约的治理 cut
+    prime_suspect = None         # Diamond：date-independent 自动锁定的真凶 cut
+    cuts_with_init_count = None  # Diamond：携带 init 的 cut 总数
+
+    if is_diamond:
+        # Diamond：升级是逐 facet 的 cut，没有「单一实现」。日常治理（BIP）也常携带 init 合约，
+        # 故先用 _diamond_prime_suspect 由链上足迹（未验证 init + 最高交易日志数）自动锁定真凶 cut，
+        # 不依赖 at_date；再用 at_date 窗口给出辅助列表。
+        with_init = [
+            e for e in timeline
+            if e.get("is_diamond_cut") and e.get("implementation_candidates")
+        ]
+        cuts_with_init_count = len(with_init)
+        prime_suspect = _diamond_prime_suspect(with_init)
+        if cutoff is not None and with_init:
+            # 先 ±2 天精确窗口，落空再放宽到 ±7 天，防止攻击日期猜偏一两天就漏掉
+            near = [e for e in with_init if abs(e["timestamp"] - cutoff) <= 2 * 86400]
+            if not near:
+                near = [e for e in with_init if abs(e["timestamp"] - cutoff) <= 7 * 86400]
+            if near:
+                suspicious_cuts = []
+                for e in near[:6]:
+                    init = e["implementation_candidates"][0]
+                    suspicious_cuts.append({
+                        "cut_on": e["date"],
+                        "tx_hash": e["tx_hash"],
+                        "init_contract": init,
+                        "init_source": _contract_source_brief(init),
+                        "hint": "用 get_tx_detail 查此交易，并用 get_contract_source 读 init_contract——"
+                                "攻击日附近的治理 cut 携带 init 合约，通常即攻击者植入的恶意逻辑。",
+                    })
+
+    elif cutoff is not None:
+        # 单实现代理/Beacon：取攻击日当天或之前最后一次升级指向的实现
+        prior = [e for e in timeline if e["timestamp"] <= cutoff + 86399
+                 and e.get("implementation_candidates")]
+        if prior:
+            last = prior[-1]
+            addr = last["implementation_candidates"][0]
+            active_at_attack = {
+                "upgraded_on": last["date"],
+                "via_event": last["event"],
+                "tx_hash": last["tx_hash"],
+                "implementation_address": addr,
+            }
+            s = _contract_source_brief(addr)
+            impl_source = {**s, "hint": "用 get_contract_source 读取此地址即可看到攻击发生时的真实逻辑代码。"}
+
+    if is_diamond:
+        if prime_suspect:
+            note = (
+                f"自动锁定真凶 cut：{prime_suspect['cut_on']} 的 DiamondCut 携带未验证 init 合约 "
+                f"{prime_suspect['init_contract']}，其交易产生 {prime_suspect['tx_log_count']} 条日志"
+                "（远超日常升级），即治理被劫持执行任意代码、大规模搬运资产的攻击入口。"
+                "见 prime_suspect_cut 字段。"
+            )
+        elif cuts_with_init_count:
+            note = (
+                f"这是 Diamond，共 {cuts_with_init_count} 次 DiamondCut 携带 init 合约，但均已验证源码，"
+                "未发现明显的未验证恶意 init；请结合 get_token_transfers / get_event_logs 进一步判断。"
+            )
+        else:
+            note = "这是 Diamond，但未发现携带 init 合约的治理 cut；攻击方式可能不在治理升级层。"
+    else:
+        note = (
+            "latest 状态可能是攻击后的修复版；务必读取 active_implementation_at_attack 指向的"
+            "历史实现合约源码，而非代理或当前实现。"
+        )
+
+    return {
+        "is_upgradeable": True,
+        "proxy_kind": "Diamond (EIP-2535)" if is_diamond else "single-implementation proxy",
+        "beacon_address": beacon,
+        "upgrade_count": len(timeline),
+        "cuts_with_init_count": cuts_with_init_count,
+        "prime_suspect_cut": prime_suspect,
+        "upgrade_timeline": timeline,
+        "active_implementation_at_attack": active_at_attack,
+        "attack_time_implementation_source": impl_source,
+        "suspicious_governance_cuts": suspicious_cuts,
+        "note": note,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Tool dispatcher
 # ---------------------------------------------------------------------------
@@ -449,6 +1323,28 @@ _TOOL_REGISTRY: Dict[str, Any] = {
         a.get("limit", 50),
     ),
     "get_tx_detail": lambda a: get_tx_detail(a["tx_hash"]),
+    "get_event_logs": lambda a: get_event_logs(
+        a["contract_address"],
+        a.get("limit", 50),
+        a.get("start_date"),
+        a.get("end_date"),
+        a.get("topic0"),
+    ),
+    "get_token_transfers": lambda a: get_token_transfers(
+        a["contract_address"], a.get("limit", 50)
+    ),
+    "resolve_proxy": lambda a: resolve_proxy(
+        a["contract_address"], a.get("at_date")
+    ),
+    "get_upgrade_history": lambda a: get_upgrade_history(
+        a["contract_address"], a.get("at_date")
+    ),
+    "get_transactions_by_date": lambda a: get_transactions_by_date(
+        a["contract_address"],
+        a["start_date"],
+        a["end_date"],
+        a.get("limit", 50),
+    ),
 }
 
 
@@ -724,11 +1620,16 @@ def _ai_synthesize_all(
     transactions: List[Dict[str, Any]],
     large_outflows: Dict[str, Any],
     tx_detail_findings: List[Dict[str, Any]],
+    token_transfers: Optional[Dict[str, Any]] = None,
+    event_logs: Optional[Dict[str, Any]] = None,
+    upgrade_history: Optional[Dict[str, Any]] = None,
+    selfdestruct_freeze: bool = False,
 ) -> Dict[str, Any]:
     """一次 GLM 调用完成全部综合分析，返回 code_signals / hypotheses / counter_evidence。"""
     system_prompt = (
         "你是 Digital Pompeii 链上验尸专家，一次性完成以下三项分析并以 JSON 对象返回，"
-        "不要输出任何解释或 Markdown，只输出合法 JSON。\n\n"
+        "不要输出任何解释或 Markdown，只输出合法 JSON。\n"
+        "【重要】所有字段内容（description、cause、evidence、counter_evidence）必须使用中文。\n\n"
         "返回格式：\n"
         "{\n"
         '  "code_signals": [{\"type\": str, \"severity\": "critical|high|medium|low", \"description\": str}],\n'
@@ -739,15 +1640,58 @@ def _ai_synthesize_all(
         "1. code_signals：扫描 Solidity 源码的安全风险信号\n"
         "2. hypotheses：综合代码信号 + 资金流 + 交易详情，给出死因假设，按置信度降序\n"
         "3. counter_evidence：能削弱或推翻最高置信假设的反证\n\n"
-        "重要提示：如果 large_outflows 中存在大额内部 ETH 转出，且源码有重入漏洞信号，"
-        "则重入攻击假设置信度应 >= 0.80。"
+        "死因分类参考（避免误判）：\n"
+        "  • 重入攻击：内部 ETH 流出多笔循环，同一地址反复收款 → 置信度 >= 0.80\n"
+        "  • 闪贷治理攻击：事件日志有治理事件 + 代币大额借贷 + 同块执行 → 与重入攻击区分\n"
+        "  • 私钥泄露：少数几笔超大额一次性 ETH 流出，无代码漏洞 → 不要误判为重入\n"
+        "  • 消息验证绕过：token_transfers 中大量不同地址转出 → 不要误判为重入\n"
+        "  • 库合约自毁：无资金流出 + selfdestruct 代码 → 资产冻结而非被盗\n"
+        "【冻结 vs 被盗 · 强制区分】仅当 selfdestruct_freeze=true 时（= 合约 runtime 代码已为空 且 已验证源码中"
+        "确含 selfdestruct/kill/suicide，二者同时成立）：死因必须判为「库合约自毁导致资产冻结」（funds frozen/"
+        "locked，资产被永久锁死），【严禁】表述为「资金被盗」「被转移」「被掏空」——Parity WalletLibrary 即此类："
+        "攻击者通过未受保护的初始化函数夺取所有权后调用 kill 自毁，依赖该库的钱包因 delegatecall 目标消失而"
+        "永久无法动用资金。根因是『未授权初始化 + 自毁』，但结果是『冻结』不是『盗窃』。\n"
+        "  注意：selfdestruct_freeze=false（含源码未验证、或代码非空）时，绝不可臆测合约自毁——"
+        "源码未验证的桥/归集合约若呈现少数几笔超大额一次性转出，优先考虑『私钥泄露/验证者被控』而非自毁。\n"
+        "【铁律】ETH 流出为 0 绝不等于「没有攻击」。大量盗窃发生在 ERC-20 代币（见 token_transfers）"
+        "或跨链消息层；务必综合 token_transfers、event_logs、upgrade_history 判断，不能只看 ETH 流出。\n"
+        "【治理攻击判定 · 最高优先级】若 upgrade_history.prime_suspect_cut 非空——工具已由链上足迹"
+        "（未验证 init 合约 + 该 cut 交易日志数远超日常升级）自动锁定真凶 cut——这是治理在升级时执行了"
+        "任意代码、大规模搬运资产的铁证，死因应直接判为「闪贷治理攻击」，置信度 >= 0.85，severity=critical，"
+        "并在 evidence 中引用 prime_suspect_cut 的 cut_on 日期、init_contract 地址与 tx_log_count。"
+        "suspicious_governance_cuts 为同类辅助信号。严禁因「链上现状干净 / 无 ETH 流出」判为休眠、正常或无攻击。\n"
+        "【反向禁令】prime_suspect_cut / suspicious_governance_cuts 为空【绝不等于】没有治理攻击——可能只是"
+        "调查不充分。严禁把它们为空当作「已排除治理攻击」的证据，更不得据此判为正常/休眠/无攻击。\n"
+        "【正常 vs 攻击】绝不能仅因「看起来像 DEX 兑换 / 收益聚合」就判为正常业务——已死亡协议的展品里，"
+        "看似正常的大额代币腾挪往往正是攻击者在转移赃款。证据不足时应判为「调查不充分/存疑」，而非「正常」。"
     )
+    # 只喂精炼信号，避免 100 条升级时间线撑爆 token
+    upgrade_signal = None
+    if isinstance(upgrade_history, dict):
+        upgrade_signal = {
+            "proxy_kind": upgrade_history.get("proxy_kind"),
+            "upgrade_count": upgrade_history.get("upgrade_count"),
+            "cuts_with_init_count": upgrade_history.get("cuts_with_init_count"),
+            "prime_suspect_cut": upgrade_history.get("prime_suspect_cut"),
+            "suspicious_governance_cuts": upgrade_history.get("suspicious_governance_cuts"),
+            "active_implementation_at_attack": upgrade_history.get("active_implementation_at_attack"),
+        }
+    event_signal = None
+    if isinstance(event_logs, dict):
+        event_signal = {
+            "decoded_event_summary": event_logs.get("decoded_event_summary"),
+            "log_count": event_logs.get("log_count"),
+        }
     context = json.dumps({
         "contract_name": contract_name,
         "source_code_preview": source_code[:6000],
         "recent_transactions_count": len(transactions),
         "large_outflows": large_outflows,
         "tx_detail_findings": tx_detail_findings,
+        "token_transfers": token_transfers,
+        "event_logs": event_signal,
+        "upgrade_history": upgrade_signal,
+        "selfdestruct_freeze": selfdestruct_freeze,
     }, ensure_ascii=False)
     user_prompt = f"请分析合约 {contract_name}：\n\n{context}"
 
@@ -858,6 +1802,8 @@ class RunLogger:
                         if isinstance(i, dict) and i.get("type") == "function")
                     if isinstance(result.get("abi"), list) else None
                 ),
+                "likely_selfdestructed": result.get("likely_selfdestructed"),
+                "has_selfdestruct_code": result.get("has_selfdestruct_code"),
             }
         if tool_name == "get_transactions" and isinstance(result, list):
             return {
@@ -1653,6 +2599,11 @@ class CoronerAgent:
             ai_result = _ai_synthesize_all(
                 source_code, contract_name, transactions,
                 large_outflows_data, tx_detail_findings,
+                token_transfers=self.state.get("token_transfers"),
+                event_logs=self.state.get("event_logs"),
+                upgrade_history=self.state.get("upgrade_history"),
+                selfdestruct_freeze=bool(contract_source.get("likely_selfdestructed")
+                                         and contract_source.get("has_selfdestruct_code")),
             )
             code_signals = ai_result["code_signals"]
             hypotheses = ai_result["hypotheses"]
@@ -1796,6 +2747,27 @@ class CoronerAgent:
             self.state["large_outflows"] = result
         elif tool_name == "get_tx_detail":
             self.state["tx_details"][args.get("tx_hash", "")] = result
+        elif tool_name == "get_event_logs":
+            self.state["event_logs"] = result
+        elif tool_name == "get_token_transfers":
+            self.state["token_transfers"] = result
+        elif tool_name == "resolve_proxy":
+            self.state["proxy_info"] = result
+        elif tool_name == "get_upgrade_history":
+            # 防覆盖：带 at_date 的调用会算出 suspicious_governance_cuts /
+            # active_implementation_at_attack；后续不带日期的调用不应把这些信号清空。
+            prev = self.state.get("upgrade_history") or {}
+            prev_signal = (prev.get("prime_suspect_cut") or prev.get("suspicious_governance_cuts")
+                           or prev.get("active_implementation_at_attack"))
+            new_signal = (isinstance(result, dict) and
+                          (result.get("prime_suspect_cut") or result.get("suspicious_governance_cuts")
+                           or result.get("active_implementation_at_attack")))
+            if prev_signal and not new_signal:
+                pass  # 保留更有信息量的旧结果
+            else:
+                self.state["upgrade_history"] = result
+        elif tool_name == "get_transactions_by_date":
+            self.state["transactions_by_date"] = result
 
     # ------------------------------------------------------------------
     # AI 模式：OpenAI tool-calling
@@ -1807,15 +2779,54 @@ class CoronerAgent:
                 "role": "system",
                 "content": (
                     "你是 Digital Pompeii 链上验尸 Agent，专门调查已死亡的以太坊 DeFi 协议。\n"
-                    "调查流程：\n"
-                    "  1. get_contract_source  — 获取合约源码和 ABI\n"
-                    "  2. get_transactions     — 获取最近普通交易（调用模式基线）\n"
-                    "  3. get_large_outflows   — 搜索内部交易大额 ETH 流出（重要！重入/闪贷攻击的资金流在这里）\n"
-                    "  4. get_tx_detail        — 对可疑大额交易深入查看（可选）\n"
-                    "  5. 信息充分后停止工具调用，直接输出结案分析\n\n"
-                    "重要提示：普通交易（txlist）看不到合约内部 ETH 转账，"
-                    "重入攻击、闪贷攻击的资金盗取均体现在内部交易中，必须调用 get_large_outflows。\n"
-                    "你的输出将被后端综合分析模块处理，请尽量收集完整信息后再停止。"
+                    "【重要】所有分析结论、死因、证据、假设，必须使用中文输出。\n\n"
+                    "可用工具及调查顺序：\n"
+                    "  1. get_contract_source        — 获取合约源码和 ABI，分析代码级漏洞\n"
+                    "  2. resolve_proxy              — 【代理合约必用】穿透到实现合约，获取真实逻辑层源码（可传 at_date 读历史实现）\n"
+                    "  3. get_upgrade_history        — 【被升级/迁移的历史案例必用】回放实现合约变更史，定位攻击当时在任的实现\n"
+                    "  4. get_transactions           — 获取普通交易，建立调用模式基线\n"
+                    "  5. get_large_outflows         — 搜索内部交易大额 ETH 流出\n"
+                    "  6. get_event_logs             — 获取合约事件日志（升级/治理事件、异常触发等，调查历史案例传 start_date/end_date）\n"
+                    "  7. get_token_transfers        — 获取 ERC-20 代币转账（bridge 攻击、治理代币闪贷）\n"
+                    "  8. get_transactions_by_date   — 【时间定位】查询特定日期范围内的交易，精准捕获攻击瞬间\n"
+                    "  9. get_tx_detail              — 深入分析可疑交易的 input data 和执行状态\n"
+                    "  信息充分后停止工具调用，由综合分析模块生成最终结论。\n\n"
+                    "【强制规则】对任何 DeFi 协议，get_event_logs 和 get_token_transfers 都是必查工具，\n"
+                    "不得跳过。ETH 流出数据只是线索之一，不足以单独结案。\n\n"
+                    "【禁止规则】未调用 get_event_logs 和 get_token_transfers 之前，\n"
+                    "严禁将死因定为「Rug Pull」或「项目方跑路」——这两种死因极易与治理攻击混淆，\n"
+                    "必须先排除闪贷治理攻击才可诊断。\n\n"
+                    "【代理合约规则 · 最高优先级】调用 get_contract_source 后，若发现以下任一情况，\n"
+                    "判定为代理/可升级合约：\n"
+                    "  - contract_name 含 Proxy、Diamond、Beacon、Upgradeable\n"
+                    "  - abi_function_count 为 0 或极少\n"
+                    "  - 源码中含 delegatecall / fallback 转发逻辑\n"
+                    "代理合约本身无业务逻辑，所有漏洞都在实现合约里。一旦判定为代理，下一步必须\n"
+                    "【在读任何实现源码之前】先把案发现场定位准，按以下固定顺序执行，不得跳步：\n"
+                    "  ① get_upgrade_history(contract_address, at_date=攻击日期)\n"
+                    "       —— 这是第一动作。攻击后协议几乎都会被升级/迁移，resolve_proxy 与\n"
+                    "          get_contract_source 的 latest 结果是「翻新后的废墟」（实现已替换、\n"
+                    "          存储槽清零），直接读会拿到错的代码。先用它拿到攻击当时在任的实现地址：\n"
+                    "          · 单实现代理/Beacon → active_implementation_at_attack.implementation_address\n"
+                    "          · Diamond → suspicious_governance_cuts 里携带真实 init 合约的那次 cut\n"
+                    "  ② get_contract_source(①拿到的历史实现地址) —— 读案发现场的真源码，分析漏洞。\n"
+                    "  ③ 需要交叉验证时，再用 resolve_proxy（可加 at_date 读历史存储槽）。\n"
+                    "严禁因为「链上现状干净 / 存储槽读数全为零 / 实现源码与攻击手法对不上」就草率诊断为\n"
+                    "Rug Pull 或无法定因——那只是废墟被翻新过，你还没看到真正的尸体。\n\n"
+                    "【时间定位规则】若 get_transactions 返回的最新交易无异常，\n"
+                    "但已有线索（新闻/事件日志/大额流出时间戳）显示攻击发生在某特定日期，\n"
+                    "必须调用 get_transactions_by_date 定向查询该日期前后 1-3 天的交易。\n\n"
+                    "死因识别指南（根据链上特征区分）：\n"
+                    "  • 重入攻击：内部交易中有多笔循环小额出账，同一攻击者地址反复收款\n"
+                    "  • 闪贷治理攻击：大额 token 转入→治理提案通过→资金流出 发生在同一区块/交易\n"
+                    "    关键信号：事件日志中有治理相关事件（Vote/Proposal/Execute），\n"
+                    "    代币转账中有超大额单笔借贷，get_event_logs + get_token_transfers 必查\n"
+                    "  • 私钥泄露/验证节点被控：少数几笔超大额一次性转出，无明显代码漏洞\n"
+                    "  • 消息验证绕过：大量小额出账来自不同地址（被公开复制的攻击交易）\n"
+                    "    关键信号：get_token_transfers 中大量不同地址转出相同 token\n"
+                    "  • 库合约自毁：无资金流出，合约后续调用全部失败，源码有 selfdestruct\n"
+                    "  • 权限漏洞：源码中初始化函数无访问控制，或 onlyOwner 被绕过\n\n"
+                    "普通交易（txlist）看不到合约内部 ETH 转账，必须调用 get_large_outflows。"
                 ),
             },
             {

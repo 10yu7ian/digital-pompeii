@@ -1,105 +1,133 @@
 {
-  "id": "nomad",
-  "name": "Nomad 跨链桥",
-  "death_date": "2022-08-02",
-  "money_lost_usd": 190000000,
-  "epitaph": "2022年8月2日。一次常规升级，改变了一行初始化参数。\n_committedRoot 被设为 0x00——一个空值，被协议解读为「任何消息均已被证明」。\n第一个攻击者发现了这一点。他成功提款后，将交易广播到世界。\n随后发生的，已超出任何「攻击」的定义。\n数百个地址开始复制同一笔交易，只改掉接收者的地址。\n不需要技术知识，不需要私钥，只需要复制、粘贴、提交。\n协议在三个小时内被掏空一亿九千万美元。\n这是区块链史上第一次「免费领取」的集体劫掠——混乱的、民主的、无法追责的。\n有些人甚至出于好意把钱存进了白帽地址。\n但钱还是没了。",
-  "warning_to_builders": "初始化参数是代码的基因。\n一个被设为零的根哈希，可以让任何消息通过验证——因为零等于「什么都已被证明」。\n升级部署前，逐行审查你的初始化值，尤其是安全相关的默认值。\n永远不要让 0x00 成为「有效状态」，除非你确切地知道它的含义。\n一个合理的默认值，是防止末日的最后一扇闸门。",
   "contract_address": "0x5d94309e5a0090b165fa4181519701637b6daeba",
-  "contract_name": "UpgradeBeaconProxy",
+  "contract_name": "Replica",
   "simulation_mode": false,
-  "hybrid_mode": true,
-  "death_cause": "消息验证绕过（Message Verification Bypass）",
-  "confidence": 0.88,
+  "hybrid_mode": false,
+  "death_cause": "初始化配置漏洞导致跨链消息验证绕过",
+  "confidence": 0.65,
   "severity": "critical",
   "evidence": [
-    "检测到 delegatecall 与 upgrade/proxy 逻辑，Nomad 采用可升级代理架构，升级时初始化参数错误是此次事故的根本原因。",
-    "历史记录证实：2022-08-02 升级后 _committedRoot 被初始化为 0x00，导致任何跨链消息均可绕过 Merkle 验证，攻击者通过简单重放交易抽走约 1.90 亿美元。"
+    "源码中 initialize 函数直接将传入的 _committedRoot 设置为确认状态 (confirmAt[_committedRoot] = 1)，若部署时传入的是默认零值，将直接导致空证明被信任",
+    "代码结构与遭受过严重攻击的 Nomad 跨链桥 Replica 合约完全一致，该类合约曾因初始化为零值导致约 1.9 亿美元资产被盗",
+    "合约存在代理升级历史，如果实现合约未受访问控制保护被恶意初始化，也会导致同样的后果"
   ],
   "technical_findings": [
     {
       "evidence_type": "code_vulnerability",
       "tx_hash": null,
       "involved_addresses": [
-        "0x5d94309e5a0090b165fa4181519701637b6daeba"
+        "0xb92336759618f55bd0f8313bd843604592e27bd8"
       ],
-      "reasoning": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-      "confidence": 0.8
+      "reasoning": "合约使用了可升级代理模式且存在 initialize 函数，如果初始化时 committedRoot 被设置为零值或未正确初始化，攻击者可构造有效证明绕过跨链验证提取资金（类似于 Nomad 桥历史漏洞）。",
+      "confidence": 0.9
     },
     {
       "evidence_type": "code_vulnerability",
       "tx_hash": null,
       "involved_addresses": [
-        "0x5d94309e5a0090b165fa4181519701637b6daeba"
+        "0xb92336759618f55bd0f8313bd843604592e27bd8"
       ],
-      "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
+      "reasoning": "合约核心依赖于更新者签名验证和 Merkle 证明验证，如果验证逻辑中的参数被不当配置或验证者私钥泄露，可能导致跨链消息伪造。",
       "confidence": 0.8
-    },
-    {
-      "evidence_type": "code_vulnerability",
-      "tx_hash": null,
-      "involved_addresses": [
-        "0x5d94309e5a0090b165fa4181519701637b6daeba"
-      ],
-      "reasoning": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。",
-      "confidence": 0.6
     },
     {
       "evidence_type": "historical_record",
       "tx_hash": null,
       "involved_addresses": [
-        "0x5d94309e5a0090b165fa4181519701637b6daeba"
+        "0xb92336759618f55bd0f8313bd843604592e27bd8"
       ],
-      "reasoning": "合约 UpgradeBeaconProxy 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 16493 bytes，满足取证基本要求。",
+      "reasoning": "合约 Replica 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 86735 bytes，满足取证基本要求。",
       "confidence": 0.99
     }
   ],
-  "counter_evidence": [],
+  "counter_evidence": [
+    "当前提取的链上数据中未发现大规模的代币或 ETH 被盗转移，缺乏直接的资金流失铁证",
+    "如果部署时 initialize 函数被正确调用并赋予了安全的 committedRoot，则验证绕过漏洞在现实中不会被触发",
+    "没有出现针对本合约的可疑治理升级或大量异常交互日志，不符合典型的已被攻击掏空的特征"
+  ],
   "all_hypotheses": [
     {
-      "cause": "消息验证绕过（Message Verification Bypass）",
-      "confidence": 0.88,
+      "cause": "初始化配置漏洞导致跨链消息验证绕过",
+      "confidence": 0.65,
       "severity": "critical",
       "evidence": [
-        "检测到 delegatecall 与 upgrade/proxy 逻辑，Nomad 采用可升级代理架构，升级时初始化参数错误是此次事故的根本原因。",
-        "历史记录证实：2022-08-02 升级后 _committedRoot 被初始化为 0x00，导致任何跨链消息均可绕过 Merkle 验证，攻击者通过简单重放交易抽走约 1.90 亿美元。"
+        "源码中 initialize 函数直接将传入的 _committedRoot 设置为确认状态 (confirmAt[_committedRoot] = 1)，若部署时传入的是默认零值，将直接导致空证明被信任",
+        "代码结构与遭受过严重攻击的 Nomad 跨链桥 Replica 合约完全一致，该类合约曾因初始化为零值导致约 1.9 亿美元资产被盗",
+        "合约存在代理升级历史，如果实现合约未受访问控制保护被恶意初始化，也会导致同样的后果"
       ],
-      "status": "confirmed",
-      "refutation_evidence": [],
-      "replaced_by": null,
-      "round_proposed": 1,
-      "round_revised": null,
-      "counter_evidence": []
+      "counter_evidence": [
+        "当前提取的链上数据中未发现大规模的代币或 ETH 被盗转移，缺乏直接的资金流失铁证",
+        "如果部署时 initialize 函数被正确调用并赋予了安全的 committedRoot，则验证绕过漏洞在现实中不会被触发",
+        "没有出现针对本合约的可疑治理升级或大量异常交互日志，不符合典型的已被攻击掏空的特征"
+      ]
+    },
+    {
+      "cause": "调查不充分/休眠合约",
+      "confidence": 0.25,
+      "severity": "low",
+      "evidence": [
+        "链上数据仅显示极少数额（约百美元级别）的 ERC-20 代币转入，且缺乏大额资金流出记录",
+        "没有发现治理升级攻击、私钥泄露的大额转出或自毁行为"
+      ],
+      "counter_evidence": [
+        "当前提取的链上数据中未发现大规模的代币或 ETH 被盗转移，缺乏直接的资金流失铁证",
+        "如果部署时 initialize 函数被正确调用并赋予了安全的 committedRoot，则验证绕过漏洞在现实中不会被触发",
+        "没有出现针对本合约的可疑治理升级或大量异常交互日志，不符合典型的已被攻击掏空的特征"
+      ]
     }
   ],
   "alternative_hypotheses": [],
   "code_signals": [
     {
-      "type": "reentrancy",
-      "severity": "high",
-      "description": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。"
+      "type": "Initializable Pattern Misconfiguration",
+      "severity": "critical",
+      "description": "合约使用了可升级代理模式且存在 initialize 函数，如果初始化时 committedRoot 被设置为零值或未正确初始化，攻击者可构造有效证明绕过跨链验证提取资金（类似于 Nomad 桥历史漏洞）。"
     },
     {
-      "type": "delegatecall",
+      "type": "Dependency Logic Risk",
       "severity": "high",
-      "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。"
-    },
-    {
-      "type": "upgradeable",
-      "severity": "medium",
-      "description": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。"
+      "description": "合约核心依赖于更新者签名验证和 Merkle 证明验证，如果验证逻辑中的参数被不当配置或验证者私钥泄露，可能导致跨链消息伪造。"
     }
   ],
   "suspicious_outflows": [],
   "suspicious_tx_details": [],
-  "timeline": [
+  "timeline": [],
+  "name": "Nomad 跨链桥",
+  "death_date": "2022-08-01",
+  "money_lost_usd": 190000000,
+  "epitaph": "2022年8月1日。一次常规升级，改变了一行初始化参数。\n_committedRoot 被设为 0x00——一个空值，被协议解读为「任何消息均已被证明」。\n第一个攻击者发现了这一点。他成功提款后，将交易广播到世界。\n随后发生的，已超出任何「攻击」的定义。\n数百个地址开始复制同一笔交易，只改掉接收者的地址。\n不需要技术知识，不需要私钥，只需要复制、粘贴、提交。\n协议在三个小时内被掏空一亿九千万美元。\n这是区块链史上第一次「免费领取」的集体劫掠——混乱的、民主的、无法追责的。\n有些人甚至出于好意把钱存进了白帽地址。\n但钱还是没了。",
+  "warning_to_builders": "初始化参数是代码的基因。\n一个被设为零的根哈希，可以让任何消息通过验证——因为零等于「什么都已被证明」。\n升级部署前，逐行审查你的初始化值，尤其是安全相关的默认值。\n永远不要让 0x00 成为「有效状态」，除非你确切地知道它的含义。\n一个合理的默认值，是防止末日的最后一扇闸门。",
+  "layman_intro": "Nomad是允许在不同区块链间转移资产的跨链桥，依靠密码学「消息认证」来确认每笔转账是否合法。一次例行升级后，开发者误将关键验证参数初始化为0——而合约把0解读为「所有消息都已被认证」。第一个发现的人套走了资金，把交易截图发到了Discord，随后数百个不相识的人竞相复制粘贴这笔交易、只改掉自己的地址，3小时内将1.9亿美元瓜分殆尽，堪称区块链史上第一次「众包式抢劫」。",
+  "consequences": "约3600万美元被白帽黑客归还，其余永久损失，Nomad Bridge关闭。此事件推动行业将「不变量测试」（Invariant Testing）和「升级前模拟」纳入安全标准流程，Foundry框架的模糊测试（Fuzz Testing）功能因此获得广泛关注。更深远的影响是：它证明了一行错误的初始化代码，可以让任何人、不需要任何技术能力，就能从协议中无限提款。",
+  "prevention_advice": [
     {
-      "hash": "0x806729d443d0b127ea07c3c9a28298336373643e08f3172ef3cb4869fd3cd19d",
-      "from": "0xd20813c5aef25a62e5e5265eb7b5b07ea0f1466e",
-      "to": "0x5d94309e5a0090b165fa4181519701637b6daeba",
-      "value_wei": 10000000000000,
-      "value_eth": 1e-05,
-      "timeStamp": "1671967559"
+      "title": "不变量测试（Invariant Testing）",
+      "detail": "用 Foundry 的 fuzz test 对关键安全条件进行随机输入测试，确保在任何情况下「已认证根 ≠ 0x00」等约束都不可违反。"
+    },
+    {
+      "title": "禁止零值作为有效安全状态",
+      "detail": "安全关键参数（如 Merkle 根哈希、owner 地址）在部署和升级时应显式校验非零，不允许 0x00 作为合法初始值通过检查。"
+    },
+    {
+      "title": "升级前主网分叉模拟",
+      "detail": "在主网升级前，在 Anvil 分叉测试环境中完整复现升级流程，验证所有初始化参数的实际值，而非仅依赖代码审查。"
+    }
+  ],
+  "aftermath": [
+    {
+      "date": "2022-08-01，攻击后数小时",
+      "title": "300 个地址的「民主式抢劫」",
+      "body": "第一个攻击者得手后，将交易截图发到了 Discord。随后 300 多个互不相识的地址蜂拥而至——不需要任何技术知识，只需复制交易、改掉收款地址、提交。这是区块链史上第一次由普通人自发参与的集体式掏空事件。"
+    },
+    {
+      "date": "2022-08，事后",
+      "title": "白帽归还了 3600 万美元",
+      "body": "其中约 3600 万美元由自称「白帽黑客」的地址发回——有人是出于道德，有人收到了 Nomad 团队的私信请求，有人甚至是误操作进去的再退出来。剩余约 1.54 亿美元消失于各处钱包，永久损失。"
+    },
+    {
+      "date": "此后",
+      "title": "「复制粘贴攻击」成为新词",
+      "body": "Nomad 事件创造了「Copycat Attack」这个术语——一次漏洞可以被无数毫无技术背景的人瞬间复现。此后的跨链桥审计必须回答一个问题：如果你的漏洞被公开，一个不懂代码的人能在五分钟内用它偷到钱吗？"
     }
   ]
 }

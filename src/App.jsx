@@ -29,7 +29,14 @@ export default function App() {
     setEntered(true);
   };
   const [activeTab, setActiveTab] = useState("exhibit");
+  const [query, setQuery] = useState("");
   const activeCase = cases.find((c) => c.id === activeId) ?? null;
+  const filteredCases = query.trim()
+    ? cases.filter((c) =>
+        c.name?.toLowerCase().includes(query.toLowerCase()) ||
+        c.death_cause?.toLowerCase().includes(query.toLowerCase())
+      )
+    : cases;
   const mainRef = useRef(null);
 
   useEffect(() => {
@@ -88,11 +95,11 @@ export default function App() {
                   </span>
                 </button>
                 <div className="flex items-center gap-6">
-                  <span className="hidden sm:block text-[10px] tracking-[0.25em] text-zinc-600 uppercase font-mono-plex">
+                  <span className="hidden sm:block text-[10px] tracking-[0.25em] text-zinc-400 uppercase font-mono-plex">
                     {cases.length} Exhibits
                   </span>
                   <div className="w-px h-4 bg-zinc-800 hidden sm:block" />
-                  <span className="text-[10px] tracking-[0.25em] text-zinc-600 uppercase font-mono-plex">
+                  <span className="text-[10px] tracking-[0.25em] text-zinc-400 uppercase font-mono-plex">
                     Archive
                   </span>
                 </div>
@@ -103,18 +110,39 @@ export default function App() {
 
               {/* Sidebar */}
               <aside className="w-full lg:w-[280px] xl:w-[300px] shrink-0 lg:sticky lg:top-24 lg:self-start lg:max-h-[calc(100vh-7rem)] lg:overflow-y-auto">
-                <p className="px-1 text-[10px] tracking-[0.28em] text-zinc-600 uppercase font-mono-plex mb-5">
-                  Exhibits · {cases.length}
+                <p className="px-1 text-[10px] tracking-[0.28em] text-zinc-400 uppercase font-mono-plex mb-3">
+                  Exhibits · {filteredCases.length}
                 </p>
+                {/* 搜索框 */}
+                <div className="relative mb-4">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-[13px]">⌕</span>
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="搜索展品 / 死因…"
+                    className="w-full bg-transparent font-mono-plex text-[12px] text-zinc-300 placeholder-zinc-700 outline-none rounded-lg pl-7 pr-3 py-2 transition-colors"
+                    style={{ border: "1px solid rgba(255,255,255,0.07)", background: "rgba(255,255,255,0.03)" }}
+                    onFocus={(e) => e.target.style.borderColor = "rgba(196,136,42,0.3)"}
+                    onBlur={(e) => e.target.style.borderColor = "rgba(255,255,255,0.07)"}
+                  />
+                  {query && (
+                    <button
+                      onClick={() => setQuery("")}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-400 text-[11px]"
+                    >✕</button>
+                  )}
+                </div>
                 <div className="space-y-2">
-                  {cases.map((c) => (
+                  {filteredCases.length > 0 ? filteredCases.map((c) => (
                     <CaseCard
                       key={c.id}
                       caseData={c}
                       isActive={c.id === activeId}
                       onClick={() => setActiveId(c.id)}
                     />
-                  ))}
+                  )) : (
+                    <p className="px-1 py-4 text-center font-mono-plex text-[11px] text-zinc-400">无匹配展品</p>
+                  )}
                 </div>
               </aside>
 
@@ -129,7 +157,7 @@ export default function App() {
                       className={`relative px-5 py-3 text-sm transition-colors duration-200 ${
                         activeTab === tab.id
                           ? "text-[#e8dcc8]"
-                          : "text-zinc-600 hover:text-zinc-400"
+                          : "text-zinc-400 hover:text-zinc-400"
                       }`}
                     >
                       <span className="flex items-center gap-2">
@@ -173,7 +201,7 @@ export default function App() {
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     className={`relative px-4 py-2.5 text-sm transition-colors ${
-                      activeTab === tab.id ? "text-[#e8dcc8]" : "text-zinc-600"
+                      activeTab === tab.id ? "text-[#e8dcc8]" : "text-zinc-400"
                     }`}
                   >
                     {tab.label}

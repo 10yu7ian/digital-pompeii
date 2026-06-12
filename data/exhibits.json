@@ -1,15 +1,114 @@
 [
   {
-    "id": "the-dao",
+    "contract_address": "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
+    "contract_name": "DAO",
+    "simulation_mode": false,
+    "hybrid_mode": false,
+    "death_cause": "重入攻击",
+    "confidence": 0.93,
+    "severity": "critical",
+    "evidence": [
+      "源码确认为历史著名的 The DAO 合约，该合约因重入攻击漏洞被黑客利用而导致以太坊硬分叉",
+      "交易详情中记录了一笔带有 31 个日志的异常交易，高度符合重入攻击中资金被多次循环递归提取的链上特征",
+      "日志数量巨大且伴随 ETH 流出，表明在单一交易中触发了多次资金转移和事件记录"
+    ],
+    "technical_findings": [
+      {
+        "evidence_type": "code_vulnerability",
+        "tx_hash": null,
+        "involved_addresses": [
+          "0x304a554a310c7e546dfe434669c62820b7d83490"
+        ],
+        "reasoning": "源码为著名的 The DAO 合约，其内部逻辑中存在典型的在更新账户余额之前向外发送以太币的缺陷，导致攻击者可以通过递归调用（fallback 函数）反复提取资金。",
+        "confidence": 0.9
+      },
+      {
+        "evidence_type": "code_vulnerability",
+        "tx_hash": null,
+        "involved_addresses": [
+          "0x304a554a310c7e546dfe434669c62820b7d83490"
+        ],
+        "reasoning": "代码使用了极为古老的 Solidity 语法和结构（如 `throw` 关键字），缺乏现代安全防护机制（如重入锁 modifier）。",
+        "confidence": 0.6
+      },
+      {
+        "evidence_type": "on_chain_transaction",
+        "tx_hash": "0x0ec3f2488a93839524add10ea229e773f6bc891b4eb4794c3337d4495263790b",
+        "involved_addresses": [
+          "0x304a554a310c7e546dfe434669c62820b7d83490"
+        ],
+        "reasoning": "状态=unknown, logs=31, value=137.624511 ETH",
+        "confidence": 0.75
+      },
+      {
+        "evidence_type": "historical_record",
+        "tx_hash": null,
+        "involved_addresses": [
+          "0x304a554a310c7e546dfe434669c62820b7d83490"
+        ],
+        "reasoning": "合约 DAO 源码已在 Etherscan 验证，编译器版本 v0.3.1-2016-04-12-3ad5e82，源码大小 45738 bytes，满足取证基本要求。",
+        "confidence": 0.99
+      }
+    ],
+    "counter_evidence": [
+      "提供的源码截断部分主要为基础的 Token 和 ManagedAccount 接口，未直接展示出存在漏洞的 `splitDAO` 核心提取逻辑"
+    ],
+    "all_hypotheses": [
+      {
+        "cause": "重入攻击",
+        "confidence": 0.93,
+        "severity": "critical",
+        "evidence": [
+          "源码确认为历史著名的 The DAO 合约，该合约因重入攻击漏洞被黑客利用而导致以太坊硬分叉",
+          "交易详情中记录了一笔带有 31 个日志的异常交易，高度符合重入攻击中资金被多次循环递归提取的链上特征",
+          "日志数量巨大且伴随 ETH 流出，表明在单一交易中触发了多次资金转移和事件记录"
+        ],
+        "counter_evidence": [
+          "提供的源码截断部分主要为基础的 Token 和 ManagedAccount 接口，未直接展示出存在漏洞的 `splitDAO` 核心提取逻辑"
+        ]
+      }
+    ],
+    "alternative_hypotheses": [],
+    "code_signals": [
+      {
+        "type": "重入漏洞",
+        "severity": "critical",
+        "description": "源码为著名的 The DAO 合约，其内部逻辑中存在典型的在更新账户余额之前向外发送以太币的缺陷，导致攻击者可以通过递归调用（fallback 函数）反复提取资金。"
+      },
+      {
+        "type": "过时的编译器版本",
+        "severity": "medium",
+        "description": "代码使用了极为古老的 Solidity 语法和结构（如 `throw` 关键字），缺乏现代安全防护机制（如重入锁 modifier）。"
+      }
+    ],
+    "suspicious_outflows": [],
+    "suspicious_tx_details": [
+      {
+        "hash": "0x0ec3f2488a93839524add10ea229e773f6bc891b4eb4794c3337d4495263790b",
+        "note": "状态=unknown, logs=31, value=137.624511 ETH"
+      }
+    ],
+    "timeline": [],
     "name": "The DAO",
     "death_date": "2016-06-17",
     "money_lost_usd": 60000000,
-    "layman_intro": "想象一台没有锁的ATM机——只要按住提款按钮不松，它就会一直吐钱。The DAO是2016年众筹了1.5亿美元的「区块链风险投资基金」，由智能合约自动管理，任何人都可以提交投资决策，代码自动执行。攻击者发现合约的提款函数在转账之前不更新余额，于是用恶意代码让合约在同一笔交易里反复执行「转账」动作，循环了362次，卷走了当时约15%的以太坊流通量。",
+    "epitaph": "2016年6月17日。区块高度 1,718,497。\n一个匿名地址以一句 .call.value() 撬开了世界上第一个去中心化自治组织的金库。\n代码在转账之后才更新余额——仅此一处顺序之误，便开启了两百多次递归抽取。\n每一次回调都是一把新钥匙，插入同一扇未上锁的门。\n1,200万美元。再一批。再一批。直到 360 万枚以太坊消失在一串嵌套的调用栈里。\n以太坊社区为此分叉：一条链选择遗忘，一条链选择铭记。\n铭记者说：代码即法律。遗忘者说：法律高于代码。\n争论至今未息。而那扇门，永远开着。",
+    "warning_to_builders": "先关门，再转账。\n检查你的操作顺序：更新余额在前，外部调用在后。\n永远不要在 .call 返回之前相信你的状态是安全的。\n重入锁廉价；历史的代价惨烈。\nChecks → Effects → Interactions，这个顺序不是建议，是图腾。",
+    "layman_intro": "想象一台没有锁的ATM机——只要按住提款按钮不松，它就会一直吐钱。The DAO是2016年众筹了1.5亿美元的「区块链风险投资基金」，由智能合约自动管理，任何人都可以提交投资决策，代码自动执行。攻击者发现合约的提款函数在转账之前不更新余额，于是用恶意代码让合约在同一笔交易里反复执行「转账」动作，循环了两百多次，掏走约360万枚ETH——接近 The DAO 全部资产的三分之一（The DAO 这一个项目当时就吸纳了全网约14%的以太坊）。",
     "consequences": "以太坊社区被迫做出历史上最艰难的选择：回滚区块链追回资金，还是坚守「代码即法律」的原则？最终社区分裂——以太坊（ETH）选择回滚，以太坊经典（ETC）坚持不改。这场分叉至今仍是区块链哲学史上最大的裂痕，也首次向世界证明：链上的错误有时真的没有撤销键。",
     "prevention_advice": [
-      { "title": "Checks-Effects-Interactions 模式", "detail": "先验证条件，再修改状态变量，最后才执行外部调用。The DAO 的致命错误就是把「转账」放在「更新余额」之前。" },
-      { "title": "ReentrancyGuard", "detail": "OpenZeppelin 提供的 nonReentrant 修饰符，一行代码封死递归入口，防止同一函数在执行过程中被重复调用。" },
-      { "title": "Pull Payment 模式", "detail": "让用户主动来合约取款，而非合约主动推送，从根源消除外部回调风险。" }
+      {
+        "title": "Checks-Effects-Interactions 模式",
+        "detail": "先验证条件，再修改状态变量，最后才执行外部调用。The DAO 的致命错误就是把「转账」放在「更新余额」之前。"
+      },
+      {
+        "title": "ReentrancyGuard",
+        "detail": "OpenZeppelin 提供的 nonReentrant 修饰符，一行代码封死递归入口，防止同一函数在执行过程中被重复调用。"
+      },
+      {
+        "title": "Pull Payment 模式",
+        "detail": "让用户主动来合约取款，而非合约主动推送，从根源消除外部回调风险。"
+      }
     ],
     "aftermath": [
       {
@@ -33,100 +132,106 @@
         "body": "攻击者从未被识别。链上的钱沉默地躺在那里，多年来几乎未被转移。有研究者认为攻击者是开发者内部人员，有人说是外部团队，有人说他们在等待时效或遗忘——没有人知道答案。"
       }
     ],
-    "epitaph": "2016年6月17日。区块高度 1,718,497。\n一个匿名地址以一句 .call.value() 撬开了世界上第一个去中心化自治组织的金库。\n代码在转账之后才更新余额——仅此一处顺序之误，便开启了三百六十二次递归抽取。\n每一次回调都是一把新钥匙，插入同一扇未上锁的门。\n1,200万美元。再一批。再一批。直到 360 万枚以太坊消失在一串嵌套的调用栈里。\n以太坊社区为此分叉：一条链选择遗忘，一条链选择铭记。\n铭记者说：代码即法律。遗忘者说：法律高于代码。\n争论至今未息。而那扇门，永远开着。",
-    "warning_to_builders": "先关门，再转账。\n检查你的操作顺序：更新余额在前，外部调用在后。\n永远不要在 .call 返回之前相信你的状态是安全的。\n重入锁廉价；历史的代价惨烈。\nChecks → Effects → Interactions，这个顺序不是建议，是图腾。",
-    "contract_address": "0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413",
-    "contract_name": "DAO",
+    "id": "the-dao"
+  },
+  {
+    "contract_address": "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4",
+    "contract_name": "WalletLibrary",
     "simulation_mode": false,
-    "hybrid_mode": true,
-    "death_cause": "重入攻击（Reentrancy Attack）",
-    "confidence": 0.95,
+    "hybrid_mode": false,
+    "death_cause": "库合约自毁导致资产冻结（攻击者接管权限并触发自毁）",
+    "confidence": 0.94,
     "severity": "critical",
     "evidence": [
-      "源码中 splitDAO() 函数使用 .call.value() 向外部地址转账，且在转账完成后才更新 paidOut 余额映射——典型的重入漏洞模式。",
-      "历史记录证实：2016-06-17 攻击者通过递归回调在单次交易中抽取约 360 万 ETH，与重入攻击特征完全吻合。"
+      "selfdestruct_freeze 标记为 true，表明合约运行时代码已被清空，确认为自毁状态。",
+      "代码包含 initMultiowned 函数，且合约未在部署时强制构造器初始化，允许任何人接管所有权。",
+      "无 ETH 流出或 token_transfers，资产仍锁定在依赖该库的代理钱包中，符合资产冻结（非直接被盗）的特征。",
+      "事件模式完全符合 Parity WalletLibrary 历史事件：攻击者夺取库合约所有权后调用 selfdestruct，导致依赖其 delegatecall 的多签钱包永久瘫痪。"
     ],
     "technical_findings": [
       {
         "evidence_type": "code_vulnerability",
         "tx_hash": null,
-        "involved_addresses": ["0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"],
-        "reasoning": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-        "confidence": 0.8
+        "involved_addresses": [
+          "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4"
+        ],
+        "reasoning": "合约包含 initMultiowned 初始化函数，虽然带有 only_uninitialized 修饰符，但若部署后未及时初始化，将被攻击者抢先调用以获取合约所有权。",
+        "confidence": 0.9
       },
       {
         "evidence_type": "code_vulnerability",
         "tx_hash": null,
-        "involved_addresses": ["0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"],
-        "reasoning": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。",
-        "confidence": 0.6
-      },
-      {
-        "evidence_type": "code_vulnerability",
-        "tx_hash": null,
-        "involved_addresses": ["0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"],
-        "reasoning": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。",
-        "confidence": 0.6
+        "involved_addresses": [
+          "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4"
+        ],
+        "reasoning": "合约（结合上下文与截断代码）包含自毁指令，拥有者可以触发 kill 清除合约 runtime 代码。",
+        "confidence": 0.9
       },
       {
         "evidence_type": "historical_record",
         "tx_hash": null,
-        "involved_addresses": ["0xBB9bc244D798123fDe783fCc1C72d3Bb8C189413"],
-        "reasoning": "合约 DAO 源码已在 Etherscan 验证，编译器版本 v0.3.1-2016-04-12-3ad5e82，源码大小 45738 bytes，满足取证基本要求。",
+        "involved_addresses": [
+          "0x863DF6BFa4469f3ead0be8f9F2AAE51c91A907b4"
+        ],
+        "reasoning": "合约 WalletLibrary 源码已在 Etherscan 验证，编译器版本 v0.4.10+commit.f0d539ae，源码大小 16725 bytes，满足取证基本要求。",
         "confidence": 0.99
       }
     ],
-    "counter_evidence": [],
+    "counter_evidence": [
+      "暂未发现可推翻该假设的反证，链上数据（无资金转移、自毁状态）和历史事实确证了资产冻结的根因。"
+    ],
     "all_hypotheses": [
       {
-        "cause": "重入攻击（Reentrancy Attack）",
-        "confidence": 0.95,
+        "cause": "库合约自毁导致资产冻结（攻击者接管权限并触发自毁）",
+        "confidence": 0.94,
         "severity": "critical",
         "evidence": [
-          "源码中 splitDAO() 函数使用 .call.value() 向外部地址转账，且在转账完成后才更新 paidOut 余额映射——典型的重入漏洞模式。",
-          "历史记录证实：2016-06-17 攻击者通过递归回调在单次交易中抽取约 360 万 ETH，与重入攻击特征完全吻合。"
+          "selfdestruct_freeze 标记为 true，表明合约运行时代码已被清空，确认为自毁状态。",
+          "代码包含 initMultiowned 函数，且合约未在部署时强制构造器初始化，允许任何人接管所有权。",
+          "无 ETH 流出或 token_transfers，资产仍锁定在依赖该库的代理钱包中，符合资产冻结（非直接被盗）的特征。",
+          "事件模式完全符合 Parity WalletLibrary 历史事件：攻击者夺取库合约所有权后调用 selfdestruct，导致依赖其 delegatecall 的多签钱包永久瘫痪。"
         ],
-        "status": "confirmed",
-        "refutation_evidence": [],
-        "replaced_by": null,
-        "round_proposed": 1,
-        "round_revised": null,
-        "counter_evidence": []
+        "counter_evidence": [
+          "暂未发现可推翻该假设的反证，链上数据（无资金转移、自毁状态）和历史事实确证了资产冻结的根因。"
+        ]
       }
     ],
-    "alternative_hypotheses": [
-      {
-        "cause": "重入攻击（Reentrancy Attack）",
-        "confidence": 0.65,
-        "severity": "high",
-        "evidence": ["检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。"],
-        "status": "revised",
-        "refutation_evidence": ["交易样本（10 笔）中 ETH 转账为零，与重入攻击连续小额快速抽资的典型资金流特征不符。"],
-        "replaced_by": "权限漏洞导致合约被暗中操控（无重入特征性资金流）",
-        "round_proposed": 1,
-        "round_revised": 2
-      }
-    ],
+    "alternative_hypotheses": [],
     "code_signals": [
-      { "type": "reentrancy", "severity": "high", "description": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。" },
-      { "type": "centralization", "severity": "medium", "description": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。" },
-      { "type": "upgradeable", "severity": "medium", "description": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。" }
+      {
+        "type": "Unprotected Initialization",
+        "severity": "critical",
+        "description": "合约包含 initMultiowned 初始化函数，虽然带有 only_uninitialized 修饰符，但若部署后未及时初始化，将被攻击者抢先调用以获取合约所有权。"
+      },
+      {
+        "type": "Selfdestruct/Kill Function",
+        "severity": "critical",
+        "description": "合约（结合上下文与截断代码）包含自毁指令，拥有者可以触发 kill 清除合约 runtime 代码。"
+      }
     ],
     "suspicious_outflows": [],
     "suspicious_tx_details": [],
-    "timeline": []
-  },
-  {
-    "id": "parity",
+    "timeline": [],
     "name": "Parity 多签钱包",
     "death_date": "2017-11-06",
-    "money_lost_usd": 150000000,
-    "layman_intro": "Parity 是一个流行的「多人共管账户」工具——类似于需要多把钥匙才能打开的保险箱，被数百个项目用来保管巨额资金。2017年11月，一个匿名用户发现合约里有个没人认领的「超级管理员」权限，出于好奇点击了「认领」，然后又点了「销毁合约」，把513个钱包共用的底层库直接摧毁了。51万枚ETH从此永久冻结，没有任何人能取出，不是被偷走，而是被锁死。",
+    "money_lost_usd": 300000000,
+    "epitaph": "2017年11月6日。一个名叫 devops199 的账户发送了两笔交易。\n第一笔：initWallet()。他成为了一个被所有人遗忘的共享库合约的主人。\n第二笔：kill()。他解雇了自己，连同这个库一起。\n那个库是五百八十七个 Parity 多签钱包的心脏。心脏自毁。\n51 万 3774 枚以太坊——当时价值逾一亿五千万美元——在同一秒永远冻结。\n没有黑客动机。没有收益。只有一个可以被任何人调用的 initWallet，\n和一个没有守门人的 selfdestruct。\n死亡不总是来自恶意。有时候，它只是一扇没有锁的门。",
+    "warning_to_builders": "库合约不是工具，是依赖。\n不要将可初始化的共享库部署为可被任意调用的独立合约。\n初始化函数只能被调用一次；selfdestruct 只能被授权者触发。\n如果你的合约可以被陌生人「认领」，那它已经死了，只是还没意识到。\n每一个 delegatecall 的终点都应该有一扇上锁的门。",
+    "layman_intro": "Parity 是一个流行的「多人共管账户」工具——类似于需要多把钥匙才能打开的保险箱，被数百个项目用来保管巨额资金。2017年11月，一个匿名用户发现合约里有个没人认领的「超级管理员」权限，出于好奇点击了「认领」，然后又点了「销毁合约」，把587个钱包共用的底层库直接摧毁了。51万枚ETH从此永久冻结，没有任何人能取出，不是被偷走，而是被锁死。",
     "consequences": "Parity公司发起EIP-999提案，希望通过以太坊协议升级来恢复冻结资金，但社区以「开创危险先例」为由否决。那51万枚ETH至今仍锁在合约里无法动用，成为区块链不可篡改性最贵的代价之一。此后行业形成共识：共享库合约不能含有自毁函数，初始化入口必须有一次性锁。",
     "prevention_advice": [
-      { "title": "初始化一次性锁", "detail": "用 OpenZeppelin 的 Initializable 合约确保 init 函数只能被调用一次，部署完成后任何人都无法再次\"认领\"所有权。" },
-      { "title": "库合约禁用 selfdestruct", "detail": "被其他合约通过 delegatecall 依赖的库合约，绝对不应包含自毁逻辑；若必须有，须限定为多签授权触发。" },
-      { "title": "部署即初始化", "detail": "将合约部署与初始化合并在同一笔交易中完成，杜绝部署后、初始化前这段时间窗口被抢占的可能。" }
+      {
+        "title": "初始化一次性锁",
+        "detail": "用 OpenZeppelin 的 Initializable 合约确保 init 函数只能被调用一次，部署完成后任何人都无法再次\"认领\"所有权。"
+      },
+      {
+        "title": "库合约禁用 selfdestruct",
+        "detail": "被其他合约通过 delegatecall 依赖的库合约，绝对不应包含自毁逻辑；若必须有，须限定为多签授权触发。"
+      },
+      {
+        "title": "部署即初始化",
+        "detail": "将合约部署与初始化合并在同一笔交易中完成，杜绝部署后、初始化前这段时间窗口被抢占的可能。"
+      }
     ],
     "aftermath": [
       {
@@ -145,105 +250,144 @@
         "body": "那 513,774 枚 ETH 随价格上涨，账面价值曾一度超过 15 亿美元。它们静静地躺在一个没有人能触碰的地址里，是全链最昂贵的「不可动用资产」，也是对「代码即法律」最具讽刺意味的注脚。"
       }
     ],
-    "epitaph": "2017年11月6日。一个名叫 devops199 的账户发送了两笔交易。\n第一笔：initWallet()。他成为了一个被所有人遗忘的共享库合约的主人。\n第二笔：kill()。他解雇了自己，连同这个库一起。\n那个库是五百一十三个 Parity 多签钱包的心脏。心脏自毁。\n51 万 3774 枚以太坊——当时价值逾一亿五千万美元——在同一秒永远冻结。\n没有黑客动机。没有收益。只有一个可以被任何人调用的 initWallet，\n和一个没有守门人的 selfdestruct。\n死亡不总是来自恶意。有时候，它只是一扇没有锁的门。",
-    "warning_to_builders": "库合约不是工具，是依赖。\n不要将可初始化的共享库部署为可被任意调用的独立合约。\n初始化函数只能被调用一次；selfdestruct 只能被授权者触发。\n如果你的合约可以被陌生人「认领」，那它已经死了，只是还没意识到。\n每一个 delegatecall 的终点都应该有一扇上锁的门。",
-    "contract_address": "0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4",
-    "contract_name": "WalletLibrary",
+    "id": "parity"
+  },
+  {
+    "contract_address": "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5",
+    "contract_name": "Diamond",
     "simulation_mode": false,
-    "hybrid_mode": true,
-    "death_cause": "库合约自毁冻结（Library Self-Destruct）",
-    "confidence": 0.9,
+    "hybrid_mode": false,
+    "death_cause": "闪贷治理攻击",
+    "confidence": 0.75,
     "severity": "critical",
     "evidence": [
-      "检测到 delegatecall，WalletLibrary 作为被代理的库合约，其自身的初始化函数缺乏访问控制。",
-      "历史记录证实：2017-11-06 用户 devops199 调用 initWallet() 获得库合约所有权后触发 kill()，导致依赖此库的 513 个多签钱包永久冻结。"
+      "upgrade_history 中的 prime_suspect_cut 自动锁定了真凶升级：该笔交易 cut_on 日期为 2022-04-17，交易哈希 0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7。",
+      "攻击者在升级时注入了未验证的恶意 init_contract (0xe5ecf73603d98a0128f05ed30506ac7a663dbb69) 执行任意代码。",
+      "该笔交易产生了异常高的 tx_log_count (121)，印证了攻击者在同块执行中大规模搬运并洗劫资产。",
+      "token_transfers 记录显示大量不同类型的 ERC-20 代币（如 BEAN, USDC, ARTEMIS 等）出现向特定地址（如 0xc1e088fc13...）的集中转移，符合利用恶意升级实施大规模盗窃的链上特征。"
     ],
     "technical_findings": [
       {
         "evidence_type": "code_vulnerability",
         "tx_hash": null,
-        "involved_addresses": ["0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"],
-        "reasoning": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-        "confidence": 0.8
-      },
-      {
-        "evidence_type": "code_vulnerability",
-        "tx_hash": null,
-        "involved_addresses": ["0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"],
-        "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
-        "confidence": 0.8
-      },
-      {
-        "evidence_type": "code_vulnerability",
-        "tx_hash": null,
-        "involved_addresses": ["0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"],
-        "reasoning": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。",
+        "involved_addresses": [
+          "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+        ],
+        "reasoning": "合约采用 EIP-2535 钻石代理模式，fallback 函数通过 delegatecall 动态路由调用逻辑，高度依赖治理或管理员的权限控制。",
         "confidence": 0.6
       },
       {
         "evidence_type": "code_vulnerability",
         "tx_hash": null,
-        "involved_addresses": ["0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"],
-        "reasoning": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。",
-        "confidence": 0.6
+        "involved_addresses": [
+          "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+        ],
+        "reasoning": "历史升级记录中存在未经验证的 init 合约，常被攻击者用于在初始化阶段植入并执行恶意的后门提款逻辑。",
+        "confidence": 0.9
+      },
+      {
+        "evidence_type": "on_chain_transaction",
+        "tx_hash": "0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7",
+        "involved_addresses": [
+          "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+        ],
+        "reasoning": "状态=success, logs=121, value=0.0 ETH",
+        "confidence": 0.75
       },
       {
         "evidence_type": "historical_record",
         "tx_hash": null,
-        "involved_addresses": ["0x863DF6BFa4469f3ead0bE8f9F2AAE51c91A907b4"],
-        "reasoning": "合约 WalletLibrary 源码已在 Etherscan 验证，编译器版本 v0.4.10+commit.f0d539ae，源码大小 16725 bytes，满足取证基本要求。",
+        "involved_addresses": [
+          "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"
+        ],
+        "reasoning": "合约 Diamond 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 30230 bytes，满足取证基本要求。",
         "confidence": 0.99
       }
     ],
-    "counter_evidence": [],
+    "counter_evidence": [
+      "如果攻击者是通过闪贷借入治理代币获取了升级权限，event_logs 解码中可能缺乏明确的治理代币闪电贷借贷和投票事件，因此不能完全排除这只是单纯的私钥泄露引发的单次恶性提款。",
+      "虽然大量代币流向了 0xc1e088fc13...，但在调查不充分的情况下，无法 100% 排除这是项目方自身进行的极端情况下的资金硬迁移（尽管使用了未验证 init 合约极其反常）。",
+      "当前代理合约源码本身仅为标准 EIP-2535 路由模板，代码层面未暴露直接的提款漏洞，所有恶意行为均发生在外部未验证的 facet 或 init 合约中。"
+    ],
     "all_hypotheses": [
       {
-        "cause": "库合约自毁冻结（Library Self-Destruct）",
-        "confidence": 0.9,
+        "cause": "闪贷治理攻击",
+        "confidence": 0.75,
         "severity": "critical",
         "evidence": [
-          "检测到 delegatecall，WalletLibrary 作为被代理的库合约，其自身的初始化函数缺乏访问控制。",
-          "历史记录证实：2017-11-06 用户 devops199 调用 initWallet() 获得库合约所有权后触发 kill()，导致依赖此库的 513 个多签钱包永久冻结。"
+          "upgrade_history 中的 prime_suspect_cut 自动锁定了真凶升级：该笔交易 cut_on 日期为 2022-04-17，交易哈希 0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7。",
+          "攻击者在升级时注入了未验证的恶意 init_contract (0xe5ecf73603d98a0128f05ed30506ac7a663dbb69) 执行任意代码。",
+          "该笔交易产生了异常高的 tx_log_count (121)，印证了攻击者在同块执行中大规模搬运并洗劫资产。",
+          "token_transfers 记录显示大量不同类型的 ERC-20 代币（如 BEAN, USDC, ARTEMIS 等）出现向特定地址（如 0xc1e088fc13...）的集中转移，符合利用恶意升级实施大规模盗窃的链上特征。"
         ],
-        "status": "confirmed",
-        "refutation_evidence": [],
-        "replaced_by": null,
-        "round_proposed": 1,
-        "round_revised": null,
-        "counter_evidence": []
+        "counter_evidence": [
+          "如果攻击者是通过闪贷借入治理代币获取了升级权限，event_logs 解码中可能缺乏明确的治理代币闪电贷借贷和投票事件，因此不能完全排除这只是单纯的私钥泄露引发的单次恶性提款。",
+          "虽然大量代币流向了 0xc1e088fc13...，但在调查不充分的情况下，无法 100% 排除这是项目方自身进行的极端情况下的资金硬迁移（尽管使用了未验证 init 合约极其反常）。",
+          "当前代理合约源码本身仅为标准 EIP-2535 路由模板，代码层面未暴露直接的提款漏洞，所有恶意行为均发生在外部未验证的 facet 或 init 合约中。"
+        ]
+      },
+      {
+        "cause": "私钥泄露导致恶意升级",
+        "confidence": 0.5,
+        "severity": "high",
+        "evidence": [
+          "LibDiamond 库的 enforceIsContractOwner 函数要求只有合约所有者才能执行关键升级操作，恶意升级的成功执行暗示原管理员私钥可能已泄露。",
+          "代币转移样本呈现多笔大额资金单向流向同一接收地址，符合私钥泄露后攻击者直接调用特权功能提款的典型模式。"
+        ],
+        "counter_evidence": [
+          "如果攻击者是通过闪贷借入治理代币获取了升级权限，event_logs 解码中可能缺乏明确的治理代币闪电贷借贷和投票事件，因此不能完全排除这只是单纯的私钥泄露引发的单次恶性提款。",
+          "虽然大量代币流向了 0xc1e088fc13...，但在调查不充分的情况下，无法 100% 排除这是项目方自身进行的极端情况下的资金硬迁移（尽管使用了未验证 init 合约极其反常）。",
+          "当前代理合约源码本身仅为标准 EIP-2535 路由模板，代码层面未暴露直接的提款漏洞，所有恶意行为均发生在外部未验证的 facet 或 init 合约中。"
+        ]
       }
     ],
     "alternative_hypotheses": [],
     "code_signals": [
-      { "type": "reentrancy", "severity": "high", "description": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。" },
-      { "type": "delegatecall", "severity": "high", "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。" },
-      { "type": "centralization", "severity": "medium", "description": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。" },
-      { "type": "upgradeable", "severity": "medium", "description": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。" }
+      {
+        "type": "Proxy Pattern",
+        "severity": "medium",
+        "description": "合约采用 EIP-2535 钻石代理模式，fallback 函数通过 delegatecall 动态路由调用逻辑，高度依赖治理或管理员的权限控制。"
+      },
+      {
+        "type": "Unverified Contract Execution",
+        "severity": "critical",
+        "description": "历史升级记录中存在未经验证的 init 合约，常被攻击者用于在初始化阶段植入并执行恶意的后门提款逻辑。"
+      }
     ],
     "suspicious_outflows": [],
-    "suspicious_tx_details": [],
-    "timeline": [
-      { "hash": "0xf3fd3a732c6ab5b01aab9a790ae0d5bb1d1b596ba2bde06b1614d9959cbade47", "from": "0x6c77cdea3fbc45ed819a9396610fb9e1d51bcd9a", "to": "0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4", "value_wei": 10000000000, "value_eth": 0.0, "timeStamp": "1663591367" },
-      { "hash": "0x734cee3fd583daa11d54f18b23528ae79bb0c45dba9bf01061ce737c06e742e8", "from": "0x1a776c84d64ecada985c968c3589b3c8615a1e7c", "to": "0x863df6bfa4469f3ead0be8f9f2aae51c91a907b4", "value_wei": 100000000000000, "value_eth": 0.0001, "timeStamp": "1572964431" }
-    ]
-  },
-  {
-    "id": "beanstalk",
+    "suspicious_tx_details": [
+      {
+        "hash": "0xcd314668aaa9bbfebaf1a0bd2b6553d01dd58899c508d4729fa7311dc5d33ad7",
+        "note": "状态=success, logs=121, value=0.0 ETH"
+      }
+    ],
+    "timeline": [],
     "name": "Beanstalk",
     "death_date": "2022-04-17",
     "money_lost_usd": 182000000,
-    "layman_intro": "闪贷是DeFi里的「无抵押瞬间贷款」——借钱、用钱、还钱必须在同一个区块（约12秒）内完成，只要最后还上就不需要任何抵押。攻击者用闪贷借入3.5亿美元买入Beanstalk的治理代币，一瞬间获得了67%以上的投票权，在同一笔交易里提交「把全部国库转给我」的提案并立即强制通过，还款离场，全程不到13秒。这是历史上第一次，一个协议被它自己的民主制度所杀死。",
+    "epitaph": "2022年4月17日。一笔闪贷买下了整个共和国的投票权。\n前一天，攻击者已悄悄递交两份提案：BIP-18 把国库资产转给自己，BIP-19 向乌克兰捐款 25 万美元——后者只是让前者看起来「人畜无害」的烟雾弹。\n这一天，他借入约 10 亿美元闪贷，瞬间换成超过三分之二的治理代币，\n再借合约里一个叫 emergencyCommit 的紧急通道，以绝对多数投票通过了 BIP-18，立即执行，归还闪贷。\n1.82 亿美元在一个区块内蒸发，他净赚约 7600 万。\n这是历史上第一次，一个协议被它自己的民主制度所杀死。\n链上不撒谎：治理代码里，投票权与执行之间，门槛低到可以被租赁一次。\n权力不需要代价，民主就只是一场可以被买下的表演。",
+    "warning_to_builders": "治理权不能和经济利益共用同一个区块。\n闪贷可以在一个区块内让任何人成为你的最大股东。\n任何允许在同一区块 acquire → vote → execute 的治理设计，\n都是在用民主的外壳包裹着一个无锁的金库。\n投票需要时间锁。紧急提案需要多重验证。\n去中心化是目的，不是漏洞的借口。",
+    "layman_intro": "闪贷是DeFi里的「无抵押瞬间贷款」——借钱、用钱、还钱必须在同一个区块（约12秒）内完成，只要最后还上就不需要任何抵押。攻击者前一天先递交了两份提案：BIP-18「把全部国库转给自己」、BIP-19「向乌克兰捐款25万美元」作烟雾弹。第二天他用闪贷借入约10亿美元买入Beanstalk的治理代币，一瞬间拿到超过三分之二的投票权，再用合约的「紧急执行」通道把BIP-18强制通过、掏空国库、还款离场。这是历史上第一次，一个协议被它自己的民主制度所杀死。",
     "consequences": "1.82亿美元蒸发，Beanstalk稳定币BEAN瞬间脱锚归零，协议实际死亡。此次攻击让整个DeFi行业意识到：链上投票权可以被「租用」一次。此后大量协议引入投票时间锁（Timelock）和快照机制，规定治理代币不能在同一区块内借入并立即用于投票，且提案通过后须等待48-72小时才能执行。",
     "prevention_advice": [
-      { "title": "投票时间锁（Timelock）", "detail": "提案通过后须等待至少48小时才能执行，给社区时间发现并通过多签委员会紧急否决恶意提案。" },
-      { "title": "快照投票（Snapshot Voting）", "detail": "用固定区块高度的余额快照计算投票权，闪贷在当前区块借入的代币余额不计入快照，无法参与本次投票。" },
-      { "title": "禁止同块借贷投票", "detail": "检测并拒绝在同一区块内发生「借入代币→投票→还款」操作的交易，从协议层封死闪贷攻击路径。" }
+      {
+        "title": "投票时间锁（Timelock）",
+        "detail": "提案通过后须等待至少48小时才能执行，给社区时间发现并通过多签委员会紧急否决恶意提案。"
+      },
+      {
+        "title": "快照投票（Snapshot Voting）",
+        "detail": "用固定区块高度的余额快照计算投票权，闪贷在当前区块借入的代币余额不计入快照，无法参与本次投票。"
+      },
+      {
+        "title": "禁止同块借贷投票",
+        "detail": "检测并拒绝在同一区块内发生「借入代币→投票→还款」操作的交易，从协议层封死闪贷攻击路径。"
+      }
     ],
     "aftermath": [
       {
         "date": "2022-04-17，攻击当日",
         "title": "攻击者真的「捐了款」",
-        "body": "他的恶意提案名叫 BIP-18：「向乌克兰人道主义危机救援捐款」。执行后，他从协议取走了 1.82 亿美元，随后向乌克兰官方加密捐款地址汇去了 25 万美元。链上记录无法篡改——那笔捐款确实发生了。"
+        "body": "攻击者一口气递交了两份提案：BIP-18 把国库掏给自己，BIP-19 向乌克兰官方加密捐款地址汇去 25 万美元。后者既是掩护，也真的执行了——链上记录无法篡改，那笔 25 万美元捐款确实发生了。他从协议取走 1.82 亿美元，还清约 10 亿美元闪贷后，自己净赚约 7600 万美元。"
       },
       {
         "date": "2022-08",
@@ -256,83 +400,130 @@
         "body": "Beanstalk 事件之后，「你的治理是否能防闪贷」成为每一个 DeFi 协议审计的必考项。Compound、Uniswap、Aave 等主流协议相继检视并强化了投票延迟机制。一次攻击，改写了行业的安全标准。"
       }
     ],
-    "epitaph": "2022年4月17日。一笔闪贷买下了整个共和国的投票权。\n攻击者借入 3.5 亿美元，换成协议治理代币，在同一个区块内召开了临时紧急大会。\n他提交了提案 BIP-18：将全部国库资产「捐献」给乌克兰人道主义救援。\n然后他在同一笔交易里，以绝对多数投票通过了它，立即执行，归还闪贷。\n1.82 亿美元在区块确认前消失。整个流程用时不到十三秒。\n这是历史上第一次，一个协议被它自己的民主制度所杀死。\n链上不撒谎：治理代码里，投票权与执行之间，没有等待，没有冷却，没有门槛。\n权力不需要代价，民主就只是一个可以被租赁一次的表演。",
-    "warning_to_builders": "治理权不能和经济利益共用同一个区块。\n闪贷可以在一个区块内让任何人成为你的最大股东。\n任何允许在同一区块 acquire → vote → execute 的治理设计，\n都是在用民主的外壳包裹着一个无锁的金库。\n投票需要时间锁。紧急提案需要多重验证。\n去中心化是目的，不是漏洞的借口。",
-    "contract_address": "0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5",
-    "contract_name": "Diamond",
+    "id": "beanstalk"
+  },
+  {
+    "contract_address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
+    "contract_name": "MainchainGatewayManager",
     "simulation_mode": false,
-    "hybrid_mode": true,
-    "death_cause": "闪贷治理攻击（Flash Loan Governance Attack）",
-    "confidence": 0.9,
+    "hybrid_mode": false,
+    "death_cause": "验证节点私钥泄露",
+    "confidence": 0.75,
     "severity": "critical",
     "evidence": [
-      "检测到 delegatecall，Beanstalk 采用 Diamond 代理模式，治理模块与执行模块通过 delegatecall 共享状态。",
-      "历史记录证实：2022-04-17 攻击者通过闪贷控制 ~67% 投票权，在单个区块内提交并执行恶意治理提案，抽走全部协议资产约 1.82 亿美元。"
+      "发生单笔极大额的 173,600 ETH 流出，收款方为单一地址 0x098b716b8aaf21512996dc57eb0615e2383e2f96。",
+      "伴随大量不同种类的代币（CASH, PLS, WETH, MiladyMaker 等）流向该相同地址。",
+      "流出模式为典型的单笔/少数几笔超大额一次性转移，而非重入攻击的循环多笔提款。",
+      "缺乏代码漏洞证据，符合掌握特权私钥的攻击者或内部人员一次性转移并掏空所有资产的特征。"
     ],
     "technical_findings": [
       {
         "evidence_type": "code_vulnerability",
         "tx_hash": null,
-        "involved_addresses": ["0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"],
-        "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
-        "confidence": 0.8
+        "involved_addresses": [
+          "0x8407dc57739bcda7aa53ca6f12f82f9d51c2f21e"
+        ],
+        "reasoning": "提供的源码片段主要为基础库（SafeMath, ERC20等），未见核心业务逻辑，无法直接判定权限验证或重入风险，但不排除业务代码存在严重缺陷。",
+        "confidence": 0.35
       },
       {
-        "evidence_type": "code_vulnerability",
-        "tx_hash": null,
-        "involved_addresses": ["0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"],
-        "reasoning": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。",
-        "confidence": 0.6
+        "evidence_type": "fund_flow",
+        "tx_hash": "0xc28fad5e8d5e0ce6a2eaf67b6687be5d58113e16be590824d6cfa1a94467d0b7",
+        "involved_addresses": [
+          "0x1a2a1c938ce3ec39b6d47113c7955baa9dd454f2",
+          "0x098b716b8aaf21512996dc57eb0615e2383e2f96"
+        ],
+        "reasoning": "内部交易大额流出 173600.0 ETH → 0x098b716b8aaf215129...",
+        "confidence": 0.8
       },
       {
         "evidence_type": "historical_record",
         "tx_hash": null,
-        "involved_addresses": ["0xC1E088fC1323b20BCBee9bd1B9fC9546db5624C5"],
-        "reasoning": "合约 Diamond 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 30230 bytes，满足取证基本要求。",
+        "involved_addresses": [
+          "0x8407dc57739bcda7aa53ca6f12f82f9d51c2f21e"
+        ],
+        "reasoning": "合约 MainchainGatewayManager 源码已在 Etherscan 验证，编译器版本 v0.5.17+commit.d19bba13，源码大小 29629 bytes，满足取证基本要求。",
         "confidence": 0.99
       }
     ],
-    "counter_evidence": [],
+    "counter_evidence": [
+      "由于核心业务逻辑的源码不可见，无法确切证明该转账是未经授权的攻击行为，理论上存在极小概率是项目方合法的资产归集或转移操作。",
+      "未发现治理事件日志，不能通过链上治理记录直接排除某项合法提案批准了此次转账。"
+    ],
     "all_hypotheses": [
       {
-        "cause": "闪贷治理攻击（Flash Loan Governance Attack）",
-        "confidence": 0.9,
+        "cause": "验证节点私钥泄露",
+        "confidence": 0.75,
         "severity": "critical",
         "evidence": [
-          "检测到 delegatecall，Beanstalk 采用 Diamond 代理模式，治理模块与执行模块通过 delegatecall 共享状态。",
-          "历史记录证实：2022-04-17 攻击者通过闪贷控制 ~67% 投票权，在单个区块内提交并执行恶意治理提案，抽走全部协议资产约 1.82 亿美元。"
+          "发生单笔极大额的 173,600 ETH 流出，收款方为单一地址 0x098b716b8aaf21512996dc57eb0615e2383e2f96。",
+          "伴随大量不同种类的代币（CASH, PLS, WETH, MiladyMaker 等）流向该相同地址。",
+          "流出模式为典型的单笔/少数几笔超大额一次性转移，而非重入攻击的循环多笔提款。",
+          "缺乏代码漏洞证据，符合掌握特权私钥的攻击者或内部人员一次性转移并掏空所有资产的特征。"
         ],
-        "status": "confirmed",
-        "refutation_evidence": [],
-        "replaced_by": null,
-        "round_proposed": 1,
-        "round_revised": null,
-        "counter_evidence": []
+        "counter_evidence": [
+          "由于核心业务逻辑的源码不可见，无法确切证明该转账是未经授权的攻击行为，理论上存在极小概率是项目方合法的资产归集或转移操作。",
+          "未发现治理事件日志，不能通过链上治理记录直接排除某项合法提案批准了此次转账。"
+        ]
+      },
+      {
+        "cause": "权限验证绕过/访问控制缺陷",
+        "confidence": 0.55,
+        "severity": "high",
+        "evidence": [
+          "合约名为 MainchainGatewayManager，作为网关管理器极可能拥有转移或托管巨额资产的管理权限。",
+          "资金被单一地址以极高的权限瞬间转出，如果是外部黑客攻击，可能是利用了未受保护的管理员函数或初始化漏洞。"
+        ],
+        "counter_evidence": [
+          "由于核心业务逻辑的源码不可见，无法确切证明该转账是未经授权的攻击行为，理论上存在极小概率是项目方合法的资产归集或转移操作。",
+          "未发现治理事件日志，不能通过链上治理记录直接排除某项合法提案批准了此次转账。"
+        ]
       }
     ],
     "alternative_hypotheses": [],
     "code_signals": [
-      { "type": "delegatecall", "severity": "high", "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。" },
-      { "type": "centralization", "severity": "medium", "description": "检测到 owner/onlyOwner 模式，单一权限账户若被盗控可直接操控核心功能。" }
+      {
+        "type": "信息不全",
+        "severity": "low",
+        "description": "提供的源码片段主要为基础库（SafeMath, ERC20等），未见核心业务逻辑，无法直接判定权限验证或重入风险，但不排除业务代码存在严重缺陷。"
+      }
     ],
-    "suspicious_outflows": [],
+    "suspicious_outflows": [
+      {
+        "hash": "0xc28fad5e8d5e0ce6a2eaf67b6687be5d58113e16be590824d6cfa1a94467d0b7",
+        "from": "0x1a2a1c938ce3ec39b6d47113c7955baa9dd454f2",
+        "to": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
+        "value_eth": 173600.0,
+        "value_wei": 173600000000000000000000,
+        "timeStamp": "1648042149",
+        "type": "call",
+        "errCode": "",
+        "flag": "内部交易大额流出 173600.0 ETH → 0x098b716b8aaf215129...",
+        "source": "internal_tx"
+      }
+    ],
     "suspicious_tx_details": [],
-    "timeline": [
-      { "hash": "0x144771e1d60db2db7e0b0a786805fe34299c335472920e9336c17e6afd718ed4", "from": "0x43a9da9bade357843fbe7e5ee3eedd910f9fac1e", "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5", "value_wei": 5000000000000000, "value_eth": 0.005, "timeStamp": "1772074259" },
-      { "hash": "0xe17c2117319cbd8ade7bd689731019aa85242716c2999ee52435af560b47f353", "from": "0x82f402847051bddaab0f5d4b481417281837c424", "to": "0xc1e088fc1323b20bcbee9bd1b9fc9546db5624c5", "value_wei": 5000000000000000, "value_eth": 0.005, "timeStamp": "1769712071" }
-    ]
-  },
-  {
-    "id": "ronin",
+    "timeline": [],
     "name": "Ronin 跨链桥",
     "death_date": "2022-03-23",
     "money_lost_usd": 625000000,
+    "epitaph": "2022年3月23日。沉默持续了六天，然后世界才知道。\nRonin 网络的九个验证节点里，五个的私钥已在数周前悄然易手。\n其中一把属于一个因合作而保留、因疏忽而遗忘的第三方节点。\n没有漏洞，没有重入，没有治理攻击。只是五把钥匙，在正确的门前被使用了。\n173,600 枚以太坊，2550 万枚 USDC，在两笔授权提款里安静离开。\n六天后，一名用户试图提取 5,000 枚 ETH，才发现金库早已空了。\n这不是代码的失败。这是信任的失败。\n链上的规则可以被完美执行，却无法阻止执行规则的人背叛规则。",
+    "warning_to_builders": "合约安全不等于系统安全。\n你的智能合约或许无懈可击，但若私钥在人手中，人就是最脆弱的一环。\n多签不是摆设——9 个签名者里，若 5 个属于同一信任链，多签只是一个幻觉。\n定期审查哪些密钥仍然有效。合作结束，授权也应结束。\n去中心化的边界不止于链上。",
     "layman_intro": "Ronin跨链桥是Axie Infinity游戏连接以太坊的通道，设有9个「验证官」，只要5个人同意就能放行转账。攻击者通过伪装成猎头公司向Axie员工发送虚假招聘PDF，植入木马后控制了4个验证官私钥；加上一个已停止合作但从未注销的第三方节点密钥，凑齐5票，直接签名发走了6.25亿美元，事后整整6天无人察觉。",
     "consequences": "这是DeFi史上最大单次盗窃案，事后调查追溯到朝鲜国家黑客组织Lazarus Group。Sky Mavis紧急向Binance等机构募资1.5亿美元赔偿用户，美国财政部将相关地址列入制裁名单，首次将国家级APT攻击与DeFi漏洞正式挂钩。此案推动行业重新审视「链上安全 ≠ 系统安全」——再完美的合约也无法阻止掌握私钥的人背叛。",
     "prevention_advice": [
-      { "title": "真正去中心化的多签", "detail": "验证节点须由地理分散、机构独立的实体各自保管私钥，禁止关联方合并控制多数席位。9个节点中，Sky Mavis自己就控制了4个，这本身就是失败的设计。" },
-      { "title": "定期审查授权列表", "detail": "合作关系终止后立即撤销对应节点的验证权限，不留遗留密钥。Axie DAO的那个休眠节点从未被主动注销，成为最致命的缺口。" },
-      { "title": "硬件安全模块（HSM）", "detail": "验证节点私钥应存储在硬件安全模块或离线硬件钱包中，不得存在联网机器，防止远程木马提取。" }
+      {
+        "title": "真正去中心化的多签",
+        "detail": "验证节点须由地理分散、机构独立的实体各自保管私钥，禁止关联方合并控制多数席位。9个节点中，Sky Mavis自己就控制了4个，这本身就是失败的设计。"
+      },
+      {
+        "title": "定期审查授权列表",
+        "detail": "合作关系终止后立即撤销对应节点的验证权限，不留遗留密钥。Axie DAO的那个休眠节点从未被主动注销，成为最致命的缺口。"
+      },
+      {
+        "title": "硬件安全模块（HSM）",
+        "detail": "验证节点私钥应存储在硬件安全模块或离线硬件钱包中，不得存在联网机器，防止远程木马提取。"
+      }
     ],
     "aftermath": [
       {
@@ -351,86 +542,126 @@
         "body": "攻击者通过去中心化混币器 Tornado Cash 清洗赃款。2022年8月，美国财政部将 Tornado Cash 智能合约本身列入制裁名单——史上首次对一段代码而非一个实体实施制裁，引发了加密隐私权的全球性辩论。"
       }
     ],
-    "epitaph": "2022年3月23日。沉默持续了六天，然后世界才知道。\nRonin 网络的九个验证节点里，五个的私钥已在数周前悄然易手。\n其中一把属于一个因合作而保留、因疏忽而遗忘的第三方节点。\n没有漏洞，没有重入，没有治理攻击。只是五把钥匙，在正确的门前被使用了。\n173,600 枚以太坊，2550 万枚 USDC，在两笔授权提款里安静离开。\n六天后，一名用户试图提款 500 万美元，才发现金库已空。\n这不是代码的失败。这是信任的失败。\n链上的规则可以被完美执行，却无法阻止执行规则的人背叛规则。",
-    "warning_to_builders": "合约安全不等于系统安全。\n你的智能合约或许无懈可击，但若私钥在人手中，人就是最脆弱的一环。\n多签不是摆设——9 个签名者里，若 5 个属于同一信任链，多签只是一个幻觉。\n定期审查哪些密钥仍然有效。合作结束，授权也应结束。\n去中心化的边界不止于链上。",
-    "contract_address": "0x098b716b8aaf21512996dc57eb0615e2383e2f96",
-    "contract_name": "Unknown",
+    "id": "ronin"
+  },
+  {
+    "contract_address": "0x5d94309e5a0090b165fa4181519701637b6daeba",
+    "contract_name": "Replica",
     "simulation_mode": false,
-    "hybrid_mode": true,
-    "death_cause": "验证节点私钥泄露（Validator Key Compromise）",
-    "confidence": 0.85,
+    "hybrid_mode": false,
+    "death_cause": "初始化配置漏洞导致跨链消息验证绕过",
+    "confidence": 0.65,
     "severity": "critical",
     "evidence": [
-      "历史记录证实：2022-03-23 攻击者控制 Ronin 9 个验证节点中的 5 个私钥（含 Sky Mavis 4 个及 Axie DAO 1 个遗留节点），伪造提款签名抽走约 6.25 亿美元。"
+      "源码中 initialize 函数直接将传入的 _committedRoot 设置为确认状态 (confirmAt[_committedRoot] = 1)，若部署时传入的是默认零值，将直接导致空证明被信任",
+      "代码结构与遭受过严重攻击的 Nomad 跨链桥 Replica 合约完全一致，该类合约曾因初始化为零值导致约 1.9 亿美元资产被盗",
+      "合约存在代理升级历史，如果实现合约未受访问控制保护被恶意初始化，也会导致同样的后果"
     ],
     "technical_findings": [
       {
-        "evidence_type": "fund_flow",
-        "tx_hash": "0x229e7814c872cc447940e00bf5923cbbb95cf9975f8e24b1ea1c30f41d6a1956",
-        "involved_addresses": ["0xe129927cfc61ce2f0b2a0ca6d8f9482d4ee60c64", "0x098b716b8aaf21512996dc57eb0615e2383e2f96"],
-        "reasoning": "单笔转出 2.0 ETH，超过警戒阈值（1.0 ETH）。",
+        "evidence_type": "code_vulnerability",
+        "tx_hash": null,
+        "involved_addresses": [
+          "0xb92336759618f55bd0f8313bd843604592e27bd8"
+        ],
+        "reasoning": "合约使用了可升级代理模式且存在 initialize 函数，如果初始化时 committedRoot 被设置为零值或未正确初始化，攻击者可构造有效证明绕过跨链验证提取资金（类似于 Nomad 桥历史漏洞）。",
+        "confidence": 0.9
+      },
+      {
+        "evidence_type": "code_vulnerability",
+        "tx_hash": null,
+        "involved_addresses": [
+          "0xb92336759618f55bd0f8313bd843604592e27bd8"
+        ],
+        "reasoning": "合约核心依赖于更新者签名验证和 Merkle 证明验证，如果验证逻辑中的参数被不当配置或验证者私钥泄露，可能导致跨链消息伪造。",
         "confidence": 0.8
+      },
+      {
+        "evidence_type": "historical_record",
+        "tx_hash": null,
+        "involved_addresses": [
+          "0xb92336759618f55bd0f8313bd843604592e27bd8"
+        ],
+        "reasoning": "合约 Replica 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 86735 bytes，满足取证基本要求。",
+        "confidence": 0.99
       }
     ],
     "counter_evidence": [
-      "合约源码未在 Etherscan 验证，链上代码层面无法直接确认漏洞细节。",
-      "死因核心为链下私钥管理失误，非智能合约代码缺陷，法医分析仅能确认资金异常流出。"
+      "当前提取的链上数据中未发现大规模的代币或 ETH 被盗转移，缺乏直接的资金流失铁证",
+      "如果部署时 initialize 函数被正确调用并赋予了安全的 committedRoot，则验证绕过漏洞在现实中不会被触发",
+      "没有出现针对本合约的可疑治理升级或大量异常交互日志，不符合典型的已被攻击掏空的特征"
     ],
     "all_hypotheses": [
       {
-        "cause": "验证节点私钥泄露（Validator Key Compromise）",
-        "confidence": 0.85,
+        "cause": "初始化配置漏洞导致跨链消息验证绕过",
+        "confidence": 0.65,
         "severity": "critical",
-        "evidence": ["历史记录证实：2022-03-23 攻击者控制 Ronin 9 个验证节点中的 5 个私钥（含 Sky Mavis 4 个及 Axie DAO 1 个遗留节点），伪造提款签名抽走约 6.25 亿美元。"],
-        "status": "confirmed",
-        "refutation_evidence": [],
-        "replaced_by": null,
-        "round_proposed": 1,
-        "round_revised": null,
+        "evidence": [
+          "源码中 initialize 函数直接将传入的 _committedRoot 设置为确认状态 (confirmAt[_committedRoot] = 1)，若部署时传入的是默认零值，将直接导致空证明被信任",
+          "代码结构与遭受过严重攻击的 Nomad 跨链桥 Replica 合约完全一致，该类合约曾因初始化为零值导致约 1.9 亿美元资产被盗",
+          "合约存在代理升级历史，如果实现合约未受访问控制保护被恶意初始化，也会导致同样的后果"
+        ],
         "counter_evidence": [
-          "合约源码未在 Etherscan 验证，链上代码层面无法直接确认漏洞细节。",
-          "死因核心为链下私钥管理失误，非智能合约代码缺陷，法医分析仅能确认资金异常流出。"
+          "当前提取的链上数据中未发现大规模的代币或 ETH 被盗转移，缺乏直接的资金流失铁证",
+          "如果部署时 initialize 函数被正确调用并赋予了安全的 committedRoot，则验证绕过漏洞在现实中不会被触发",
+          "没有出现针对本合约的可疑治理升级或大量异常交互日志，不符合典型的已被攻击掏空的特征"
+        ]
+      },
+      {
+        "cause": "调查不充分/休眠合约",
+        "confidence": 0.25,
+        "severity": "low",
+        "evidence": [
+          "链上数据仅显示极少数额（约百美元级别）的 ERC-20 代币转入，且缺乏大额资金流出记录",
+          "没有发现治理升级攻击、私钥泄露的大额转出或自毁行为"
+        ],
+        "counter_evidence": [
+          "当前提取的链上数据中未发现大规模的代币或 ETH 被盗转移，缺乏直接的资金流失铁证",
+          "如果部署时 initialize 函数被正确调用并赋予了安全的 committedRoot，则验证绕过漏洞在现实中不会被触发",
+          "没有出现针对本合约的可疑治理升级或大量异常交互日志，不符合典型的已被攻击掏空的特征"
         ]
       }
     ],
-    "alternative_hypotheses": [
+    "alternative_hypotheses": [],
+    "code_signals": [
       {
-        "cause": "死因未知，需进一步链上数据核实",
-        "confidence": 0.2,
-        "severity": "low",
-        "evidence": ["源码中未发现已知高风险代码模式，需依赖交易数据推断。"],
-        "status": "revised",
-        "refutation_evidence": ["发现大额链上资金流出记录，与原假设（非资金直接流失模式）不完全吻合，修正为盗取/抽逃假设。"],
-        "replaced_by": "大额资金盗取或流动性抽逃（Rug Pull）",
-        "round_proposed": 1,
-        "round_revised": 2
+        "type": "Initializable Pattern Misconfiguration",
+        "severity": "critical",
+        "description": "合约使用了可升级代理模式且存在 initialize 函数，如果初始化时 committedRoot 被设置为零值或未正确初始化，攻击者可构造有效证明绕过跨链验证提取资金（类似于 Nomad 桥历史漏洞）。"
+      },
+      {
+        "type": "Dependency Logic Risk",
+        "severity": "high",
+        "description": "合约核心依赖于更新者签名验证和 Merkle 证明验证，如果验证逻辑中的参数被不当配置或验证者私钥泄露，可能导致跨链消息伪造。"
       }
     ],
-    "code_signals": [],
-    "suspicious_outflows": [
-      { "hash": "0x229e7814c872cc447940e00bf5923cbbb95cf9975f8e24b1ea1c30f41d6a1956", "from": "0xe129927cfc61ce2f0b2a0ca6d8f9482d4ee60c64", "to": "0x098b716b8aaf21512996dc57eb0615e2383e2f96", "value_wei": 2000000000000000000, "value_eth": 2.0, "timeStamp": "1708746647", "flag": "单笔转出 2.0 ETH，超过警戒阈值（1.0 ETH）。" }
-    ],
+    "suspicious_outflows": [],
     "suspicious_tx_details": [],
-    "timeline": [
-      { "hash": "0x3ea22b4718f60851bdf4e54a2529bf9759775a419d7d8343f1b4381b2e151796", "from": "0x8c75ad518dce956b488ab65e36ab229d8664bf29", "to": "0x098b716b8aaf21512996dc57eb0615e2383e2f96", "value_wei": 45850000000000, "value_eth": 4.6e-05, "timeStamp": "1775737295" },
-      { "hash": "0x229e7814c872cc447940e00bf5923cbbb95cf9975f8e24b1ea1c30f41d6a1956", "from": "0xe129927cfc61ce2f0b2a0ca6d8f9482d4ee60c64", "to": "0x098b716b8aaf21512996dc57eb0615e2383e2f96", "value_wei": 2000000000000000000, "value_eth": 2.0, "timeStamp": "1708746647" }
-    ]
-  },
-  {
-    "id": "nomad",
+    "timeline": [],
     "name": "Nomad 跨链桥",
-    "death_date": "2022-08-02",
+    "death_date": "2022-08-01",
     "money_lost_usd": 190000000,
+    "epitaph": "2022年8月1日。一次常规升级，改变了一行初始化参数。\n_committedRoot 被设为 0x00——一个空值，被协议解读为「任何消息均已被证明」。\n第一个攻击者发现了这一点。他成功提款后，将交易广播到世界。\n随后发生的，已超出任何「攻击」的定义。\n数百个地址开始复制同一笔交易，只改掉接收者的地址。\n不需要技术知识，不需要私钥，只需要复制、粘贴、提交。\n协议在三个小时内被掏空一亿九千万美元。\n这是区块链史上第一次「免费领取」的集体劫掠——混乱的、民主的、无法追责的。\n有些人甚至出于好意把钱存进了白帽地址。\n但钱还是没了。",
+    "warning_to_builders": "初始化参数是代码的基因。\n一个被设为零的根哈希，可以让任何消息通过验证——因为零等于「什么都已被证明」。\n升级部署前，逐行审查你的初始化值，尤其是安全相关的默认值。\n永远不要让 0x00 成为「有效状态」，除非你确切地知道它的含义。\n一个合理的默认值，是防止末日的最后一扇闸门。",
     "layman_intro": "Nomad是允许在不同区块链间转移资产的跨链桥，依靠密码学「消息认证」来确认每笔转账是否合法。一次例行升级后，开发者误将关键验证参数初始化为0——而合约把0解读为「所有消息都已被认证」。第一个发现的人套走了资金，把交易截图发到了Discord，随后数百个不相识的人竞相复制粘贴这笔交易、只改掉自己的地址，3小时内将1.9亿美元瓜分殆尽，堪称区块链史上第一次「众包式抢劫」。",
     "consequences": "约3600万美元被白帽黑客归还，其余永久损失，Nomad Bridge关闭。此事件推动行业将「不变量测试」（Invariant Testing）和「升级前模拟」纳入安全标准流程，Foundry框架的模糊测试（Fuzz Testing）功能因此获得广泛关注。更深远的影响是：它证明了一行错误的初始化代码，可以让任何人、不需要任何技术能力，就能从协议中无限提款。",
     "prevention_advice": [
-      { "title": "不变量测试（Invariant Testing）", "detail": "用 Foundry 的 fuzz test 对关键安全条件进行随机输入测试，确保在任何情况下「已认证根 ≠ 0x00」等约束都不可违反。" },
-      { "title": "禁止零值作为有效安全状态", "detail": "安全关键参数（如 Merkle 根哈希、owner 地址）在部署和升级时应显式校验非零，不允许 0x00 作为合法初始值通过检查。" },
-      { "title": "升级前主网分叉模拟", "detail": "在主网升级前，在 Anvil 分叉测试环境中完整复现升级流程，验证所有初始化参数的实际值，而非仅依赖代码审查。" }
+      {
+        "title": "不变量测试（Invariant Testing）",
+        "detail": "用 Foundry 的 fuzz test 对关键安全条件进行随机输入测试，确保在任何情况下「已认证根 ≠ 0x00」等约束都不可违反。"
+      },
+      {
+        "title": "禁止零值作为有效安全状态",
+        "detail": "安全关键参数（如 Merkle 根哈希、owner 地址）在部署和升级时应显式校验非零，不允许 0x00 作为合法初始值通过检查。"
+      },
+      {
+        "title": "升级前主网分叉模拟",
+        "detail": "在主网升级前，在 Anvil 分叉测试环境中完整复现升级流程，验证所有初始化参数的实际值，而非仅依赖代码审查。"
+      }
     ],
     "aftermath": [
       {
-        "date": "2022-08-02，攻击后数小时",
+        "date": "2022-08-01，攻击后数小时",
         "title": "300 个地址的「民主式抢劫」",
         "body": "第一个攻击者得手后，将交易截图发到了 Discord。随后 300 多个互不相识的地址蜂拥而至——不需要任何技术知识，只需复制交易、改掉收款地址、提交。这是区块链史上第一次由普通人自发参与的集体式掏空事件。"
       },
@@ -445,77 +676,6 @@
         "body": "Nomad 事件创造了「Copycat Attack」这个术语——一次漏洞可以被无数毫无技术背景的人瞬间复现。此后的跨链桥审计必须回答一个问题：如果你的漏洞被公开，一个不懂代码的人能在五分钟内用它偷到钱吗？"
       }
     ],
-    "epitaph": "2022年8月2日。一次常规升级，改变了一行初始化参数。\n_committedRoot 被设为 0x00——一个空值，被协议解读为「任何消息均已被证明」。\n第一个攻击者发现了这一点。他成功提款后，将交易广播到世界。\n随后发生的，已超出任何「攻击」的定义。\n数百个地址开始复制同一笔交易，只改掉接收者的地址。\n不需要技术知识，不需要私钥，只需要复制、粘贴、提交。\n协议在三个小时内被掏空一亿九千万美元。\n这是区块链史上第一次「免费领取」的集体劫掠——混乱的、民主的、无法追责的。\n有些人甚至出于好意把钱存进了白帽地址。\n但钱还是没了。",
-    "warning_to_builders": "初始化参数是代码的基因。\n一个被设为零的根哈希，可以让任何消息通过验证——因为零等于「什么都已被证明」。\n升级部署前，逐行审查你的初始化值，尤其是安全相关的默认值。\n永远不要让 0x00 成为「有效状态」，除非你确切地知道它的含义。\n一个合理的默认值，是防止末日的最后一扇闸门。",
-    "contract_address": "0x5d94309e5a0090b165fa4181519701637b6daeba",
-    "contract_name": "UpgradeBeaconProxy",
-    "simulation_mode": false,
-    "hybrid_mode": true,
-    "death_cause": "消息验证绕过（Message Verification Bypass）",
-    "confidence": 0.88,
-    "severity": "critical",
-    "evidence": [
-      "检测到 delegatecall 与 upgrade/proxy 逻辑，Nomad 采用可升级代理架构，升级时初始化参数错误是此次事故的根本原因。",
-      "历史记录证实：2022-08-02 升级后 _committedRoot 被初始化为 0x00，导致任何跨链消息均可绕过 Merkle 验证，攻击者通过简单重放交易抽走约 1.90 亿美元。"
-    ],
-    "technical_findings": [
-      {
-        "evidence_type": "code_vulnerability",
-        "tx_hash": null,
-        "involved_addresses": ["0x5d94309e5a0090b165fa4181519701637b6daeba"],
-        "reasoning": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。",
-        "confidence": 0.8
-      },
-      {
-        "evidence_type": "code_vulnerability",
-        "tx_hash": null,
-        "involved_addresses": ["0x5d94309e5a0090b165fa4181519701637b6daeba"],
-        "reasoning": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。",
-        "confidence": 0.8
-      },
-      {
-        "evidence_type": "code_vulnerability",
-        "tx_hash": null,
-        "involved_addresses": ["0x5d94309e5a0090b165fa4181519701637b6daeba"],
-        "reasoning": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。",
-        "confidence": 0.6
-      },
-      {
-        "evidence_type": "historical_record",
-        "tx_hash": null,
-        "involved_addresses": ["0x5d94309e5a0090b165fa4181519701637b6daeba"],
-        "reasoning": "合约 UpgradeBeaconProxy 源码已在 Etherscan 验证，编译器版本 v0.7.6+commit.7338295f，源码大小 16493 bytes，满足取证基本要求。",
-        "confidence": 0.99
-      }
-    ],
-    "counter_evidence": [],
-    "all_hypotheses": [
-      {
-        "cause": "消息验证绕过（Message Verification Bypass）",
-        "confidence": 0.88,
-        "severity": "critical",
-        "evidence": [
-          "检测到 delegatecall 与 upgrade/proxy 逻辑，Nomad 采用可升级代理架构，升级时初始化参数错误是此次事故的根本原因。",
-          "历史记录证实：2022-08-02 升级后 _committedRoot 被初始化为 0x00，导致任何跨链消息均可绕过 Merkle 验证，攻击者通过简单重放交易抽走约 1.90 亿美元。"
-        ],
-        "status": "confirmed",
-        "refutation_evidence": [],
-        "replaced_by": null,
-        "round_proposed": 1,
-        "round_revised": null,
-        "counter_evidence": []
-      }
-    ],
-    "alternative_hypotheses": [],
-    "code_signals": [
-      { "type": "reentrancy", "severity": "high", "description": "检测到外部 .call 调用（含 .call.value / .call.gas 等旧版写法），若在转账后修改状态变量则存在重入漏洞（reentrancy）风险。" },
-      { "type": "delegatecall", "severity": "high", "description": "检测到 delegatecall，代理合约可能存在存储槽冲突或执行上下文劫持。" },
-      { "type": "upgradeable", "severity": "medium", "description": "检测到 upgrade/proxy 逻辑，合约实现可被替换，升级权限失控则整体逻辑可被篡改。" }
-    ],
-    "suspicious_outflows": [],
-    "suspicious_tx_details": [],
-    "timeline": [
-      { "hash": "0x806729d443d0b127ea07c3c9a28298336373643e08f3172ef3cb4869fd3cd19d", "from": "0xd20813c5aef25a62e5e5265eb7b5b07ea0f1466e", "to": "0x5d94309e5a0090b165fa4181519701637b6daeba", "value_wei": 10000000000000, "value_eth": 1e-05, "timeStamp": "1671967559" }
-    ]
+    "id": "nomad"
   }
 ]

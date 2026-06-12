@@ -86,7 +86,12 @@ async function analyzeContract(address) {
   steps.push({ label: "扫描已知风险模式", status: "loading" });
   const codeFlags = [];
   if (sourceCode) {
-    if (/\.call\.value|\.call{value/.test(sourceCode)) codeFlags.push("reentrancy");
+    // 旧版危险写法：.call.value(...)(  或  .call{value:...}(  后紧接着修改状态
+    // 排除现代写法 (bool success, ) = addr.call{value:...}("")
+    const hasLegacyCall = /\.call\.value\s*\(/.test(sourceCode);
+    const hasModernCallWithoutCheck = /\.call\{value[^}]*\}\s*\(\s*\)(?!\s*;?\s*require)/.test(sourceCode);
+    if (hasLegacyCall || hasModernCallWithoutCheck) codeFlags.push("reentrancy");
+
     if (/delegatecall/i.test(sourceCode))             codeFlags.push("delegatecall");
     if (/selfdestruct/i.test(sourceCode))             codeFlags.push("selfdestruct");
     if (/flashloan|flash_loan|FlashLoan/i.test(sourceCode)) codeFlags.push("flashloan");
@@ -102,6 +107,11 @@ async function analyzeContract(address) {
   if (codeFlags.includes("delegatecall") && codeFlags.includes("selfdestruct")) score += 15;
   if (codeFlags.includes("centralized")) score += 5;
   score = Math.min(100, score);
+
+  // 已知死亡案例强制高风险
+  if (known) {
+    score = 100;
+  }
 
   const riskLevel =
     score >= 60 ? "high" :
@@ -128,10 +138,12 @@ async function analyzeContract(address) {
       fail:  "合约代码未公开，无法验证内部逻辑，这是最常见的跑路前兆",
     },
     {
-      ok:    largeOutflows === 0,
+      ok:    largeOutflows === 0 && !known,
       label: "是否存在异常大额资金流出",
       pass:  "未发现异常大额资金流出记录",
-      fail:  `发现 ${largeOutflows} 笔大额资金流出，合计约 ${totalOutflowEth.toFixed(0)} ETH，存在资金被抽走迹象`,
+      fail:  known
+        ? `历史上发生过大规模资金盗取事件，损失 $${known.loss ? (known.loss / 1e6).toFixed(0) + "M" : "巨额"}`
+        : `发现 ${largeOutflows} 笔大额资金流出，合计约 ${totalOutflowEth.toFixed(0)} ETH，存在资金被抽走迹象`,
     },
     {
       ok:    !codeFlags.includes("reentrancy"),
@@ -208,11 +220,11 @@ export default function HealthCheck({ onBack, onOpenCase }) {
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-white/[0.04] bg-[#07060a]/90 backdrop-blur-xl px-6 py-4">
         <div className="mx-auto flex max-w-[900px] items-center justify-between">
-          <button onClick={onBack} className="flex items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors text-sm">
+          <button onClick={onBack} className="flex items-center gap-2 text-zinc-400 hover:text-zinc-300 transition-colors text-sm">
             <span>←</span>
             <span className="font-mono-plex tracking-wider">返回博物馆</span>
           </button>
-          <div className="font-mono-plex text-[11px] tracking-[0.3em] text-zinc-600 uppercase">
+          <div className="font-mono-plex text-[11px] tracking-[0.3em] text-zinc-400 uppercase">
             项目健康检测 · Beta
           </div>
         </div>
@@ -236,7 +248,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
             </h1>
             <p className="text-zinc-400 text-lg leading-relaxed max-w-[500px] mx-auto">
               粘贴任意以太坊合约地址<br />
-              <span style={{ color: "rgba(255,255,255,0.38)" }}>AI 验尸官替你排查风险，用人话告诉你该不该入</span>
+              <span style={{ color: "rgba(255,255,255,0.68)" }}>AI 验尸官替你排查风险，用最简单的话告诉你该不该入</span>
             </p>
           </motion.div>
 
@@ -258,7 +270,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
                     boxShadow: "0 0 60px rgba(56,189,248,0.04), 0 24px 48px rgba(0,0,0,0.5)",
                   }}
                 >
-                  <label className="block font-mono-plex text-[11px] tracking-[0.28em] text-zinc-500 uppercase mb-3">
+                  <label className="block font-mono-plex text-[11px] tracking-[0.28em] text-zinc-400 uppercase mb-3">
                     合约地址
                   </label>
                   <div className="flex gap-3">
@@ -285,7 +297,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
 
                   {/* Example addresses */}
                   <div className="mt-5 pt-5 border-t border-white/[0.05]">
-                    <p className="font-mono-plex text-[10px] tracking-[0.25em] text-zinc-600 uppercase mb-3">试试这些历史死亡案例</p>
+                    <p className="font-mono-plex text-[10px] tracking-[0.25em] text-zinc-400 uppercase mb-3">试试这些历史死亡案例</p>
                     <div className="flex flex-wrap gap-2">
                       {cases.slice(0, 4).map((c) => (
                         <button
@@ -295,7 +307,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
                           style={{
                             background: "rgba(255,255,255,0.04)",
                             border: "1px solid rgba(255,255,255,0.08)",
-                            color: "rgba(255,255,255,0.45)",
+                            color: "rgba(255,255,255,0.72)",
                           }}
                         >
                           {c.name}
@@ -407,7 +419,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
                 >
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <div>
-                      <p className="font-mono-plex text-[11px] tracking-[0.28em] text-zinc-500 uppercase mb-2">
+                      <p className="font-mono-plex text-[11px] tracking-[0.28em] text-zinc-400 uppercase mb-2">
                         {result.contractName || "未知合约"} · 综合风险评级
                       </p>
                       <div className="flex items-center gap-3">
@@ -421,7 +433,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
                       <div className="font-mono-plex text-5xl font-bold" style={{ color: rc.color }}>
                         {result.score}
                       </div>
-                      <div className="font-mono-plex text-[10px] tracking-[0.2em] text-zinc-600 uppercase">风险分（100分满）</div>
+                      <div className="font-mono-plex text-[10px] tracking-[0.2em] text-zinc-400 uppercase">风险分（100分满）</div>
                     </div>
                   </div>
                 </div>
@@ -461,7 +473,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
                     border: "1px solid rgba(255,255,255,0.06)",
                   }}
                 >
-                  <p className="font-mono-plex text-[11px] tracking-[0.28em] text-zinc-500 uppercase mb-5">体检报告</p>
+                  <p className="font-mono-plex text-[11px] tracking-[0.28em] text-zinc-400 uppercase mb-5">体检报告</p>
                   {result.findings.map((f, i) => (
                     <motion.div
                       key={i}
@@ -527,7 +539,7 @@ export default function HealthCheck({ onBack, onOpenCase }) {
                   >
                     <p className="text-sm" style={{ color: "rgba(52,211,153,0.7)" }}>
                       暂未发现高危信号，但区块链世界风险永远存在。<br />
-                      <span style={{ color: "rgba(255,255,255,0.35)" }}>不构成投资建议，请自行做更多研究（DYOR）。</span>
+                      <span style={{ color: "rgba(255,255,255,0.65)" }}>不构成投资建议，请自行做更多研究（DYOR）。</span>
                     </p>
                   </motion.div>
                 )}
