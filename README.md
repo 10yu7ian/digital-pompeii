@@ -186,7 +186,7 @@ digital-pompeii/
 - **5 案全部纯 AI 模式结案**（`hybrid_mode: false`）：由 GLM-5.1 自主多轮工具调用独立定因，无人工兜底。
 - **内容经外部逐条核查**：5 案的每一处数据、死因、墓志铭都对照外部公开资料（Wikipedia / Immunefi / Halborn / Proskauer 等）核实并改正，留档于 [`FACT_CHECK.md`](FACT_CHECK.md)——技术层零虚构，文学层不编造。
 - **攻坚「翻新后的废墟」**：Beanstalk / Nomad 是最难的两例——攻击后协议被升级/迁移，链上现状是「翻新后的废墟」（实现合约已替换、存储槽被清零），直接读 `latest` 只会看到修复版而非案发现场。为此我们构建了**升级考古工具 `get_upgrade_history`**：回放代理的实现变更史，自动定位攻击当时在任的实现合约（Nomad 的攻击前 `Replica`）或携带恶意 init 合约的治理 cut（Beanstalk 的 BIP-18 攻击者合约 `0xe5ecf736…`，靠「未验证 init + 该 cut 交易日志数最高」的链上足迹自动锁定，不依赖外部已知日期）。正因如此，这两案才得以从 hybrid 升级为纯 AI 模式。
-- **链上存证（可选）**：每件展品的报告哈希通过 OpenTimestamps 锚定，作为「不可篡改的警示碑」凭证 — 〈OTS 凭证链接〉
+- **链上存证**：每件展品的报告哈希通过 OpenTimestamps 锚定比特币区块链，凭证文件见 [`data/*.json.ots`](data/)，可用 `ots verify` 独立验证。
 
 ---
 

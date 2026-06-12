@@ -261,7 +261,8 @@ export default function AgentConsole({ caseData }) {
   }
 
   const shownEvents = events.slice(0, visibleCount);
-  const progress = events.length > 0 ? visibleCount / events.length : 0;
+  const visibleRounds = shownEvents.filter(e => e.type === "tool_call").length;
+  const progress = totalRounds > 0 ? visibleRounds / totalRounds : 0;
 
   return (
     <article className="max-w-3xl pb-24 space-y-8">
@@ -360,7 +361,7 @@ export default function AgentConsole({ caseData }) {
             transition={{ duration: 0.3 }}
           />
         </div>
-        <span className="font-mono-plex text-[14px] text-zinc-400">{visibleCount}/{events.length}</span>
+        <span className="font-mono-plex text-[14px] text-zinc-400">{visibleRounds}/{totalRounds}</span>
       </div>
 
       {/* Death report title after playback */}
