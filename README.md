@@ -9,6 +9,7 @@
 
 - 🏛️ 博物馆入口：https://digital-pompeii.vercel.app
 - 🎬 Demo 视频：〈3–5 分钟视频链接〉
+- 📖 PPT 链接：https://notebooklm.google.com/notebook/ee168320-dad2-4ec7-868c-a88131fa971c/artifact/4dea903e-3454-4370-bb27-647b9c22bdfd?utm_source=nlm_web_share&utm_medium=google_oo&utm_campaign=art_share_2&utm_content=&utm_smc=nlm_web_share_google_oo_art_share_2_
 - 🏆 赛道：Z.AI · Web3 × Long-Horizon Task
 
 ---
