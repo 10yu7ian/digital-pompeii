@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   motion,
-  useMotionValue, useSpring, useTransform, useVelocity, useScroll, useMotionTemplate,
+  useSpring, useTransform, useVelocity, useScroll, useMotionTemplate,
 } from "framer-motion";
 import ParticleField from "./ParticleField";
 import { useTilt } from "../hooks/useTilt";

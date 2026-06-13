@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import runsIndex from "../data/runs_index.json";
-import { PixelCoroner, PixelMagnify } from "./PixelIcons";
+import { PixelCoroner } from "./PixelIcons";
 
 function fmtTs(ts) {
   const m = ts?.match(/^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/);
@@ -176,7 +176,7 @@ function RunStartEvent({ event }) {
   );
 }
 
-function EventCard({ event, index, caseData, totalRounds }) {
+function EventCard({ event, caseData, totalRounds }) {
   return (
     <motion.div
       initial={{ opacity: 0, x: -12 }}
@@ -398,7 +398,7 @@ export default function AgentConsole({ caseData }) {
         <div className="space-y-0">
           <AnimatePresence initial={false}>
             {shownEvents.map((event, i) => (
-              <EventCard key={`${selectedRunIdx}-${i}`} event={event} index={i} caseData={caseData} totalRounds={totalRounds} />
+              <EventCard key={`${selectedRunIdx}-${i}`} event={event} caseData={caseData} totalRounds={totalRounds} />
             ))}
           </AnimatePresence>
           {visibleCount >= events.length && (

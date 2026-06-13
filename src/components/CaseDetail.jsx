@@ -23,7 +23,7 @@ const STATUS_META = {
   refuted:   { label: "已否定", color: "rgba(113,113,122,0.6)", bg: "rgba(63,63,70,0.07)",   border: "rgba(63,63,70,0.2)" },
 };
 
-function Tag({ type, label, bg, border, color }) {
+function Tag({ type }) {
   const m = EV_META[type] ?? { label: type ?? "—", color: "rgba(161,161,170,0.7)", bg: "rgba(63,63,70,0.07)", border: "rgba(63,63,70,0.2)" };
   return (
     <span
@@ -241,6 +241,8 @@ function Panel({ children, className = "", glow = false, amber = false }) {
 }
 
 export default function CaseDetail({ caseData }) {
+  const [showMedal, setShowMedal] = useState(false);
+
   if (!caseData) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
@@ -250,8 +252,6 @@ export default function CaseDetail({ caseData }) {
       </div>
     );
   }
-
-  const [showMedal, setShowMedal] = useState(false);
 
   const conf = cfmt(caseData.confidence);
   const findings = Array.isArray(caseData.technical_findings) ? caseData.technical_findings : [];
