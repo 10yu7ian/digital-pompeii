@@ -240,7 +240,8 @@ Digital Pompeii 的核心护城河不是单次 AI 分析，而是持续积累的
 
 ## 十、团队
 
-Riso · Clara
+Riso   liermi1996@gmail.com
+Clara  f2621264671@gmail.com
 
 ## Built with
 
