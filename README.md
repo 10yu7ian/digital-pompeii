@@ -8,7 +8,7 @@
 **一句话**：输入一个链上项目或合约地址，Digital Pompeii 会让自主 Agent 从公开链上证据中还原事故原因，生成一份可复核、可读懂的「死亡报告」，并把它整理成一件面向后来者的链上安全展品。
 
 - 🏛️ 博物馆入口：https://digital-pompeii.vercel.app
-- 🎬 Demo 视频：〈3–5 分钟视频链接〉
+- 🎬 Demo 视频：https://drive.google.com/file/d/16mdazptZU9Pu-qo6AefLwiYlUcboSeHj/view?usp=sharing
 - 📖 PPT 链接：https://notebooklm.google.com/notebook/ee168320-dad2-4ec7-868c-a88131fa971c/artifact/4dea903e-3454-4370-bb27-647b9c22bdfd?utm_source=nlm_web_share&utm_medium=google_oo&utm_campaign=art_share_2&utm_content=&utm_smc=nlm_web_share_google_oo_art_share_2_
 - 🏆 赛道：Z.AI · Web3 × Long-Horizon Task
 
