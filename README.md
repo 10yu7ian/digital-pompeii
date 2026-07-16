@@ -2,6 +2,7 @@
 
 # 数字庞贝 · Digital Pompeii
 
+> 🏆 AI x Web3 Agentic Buiders Hackathon Z.AI赛道 冠军作品
 > 一座记录链上失败、解释风险模式的去中心化灾难博物馆。
 > An AI-powered on-chain disaster museum and forensic archive for Web3 failures.
 
