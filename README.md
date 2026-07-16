@@ -5,7 +5,7 @@
 > 一座记录链上失败、解释风险模式的去中心化灾难博物馆。
 > An AI-powered on-chain disaster museum and forensic archive for Web3 failures.
 >
-> > 🏆 AI x Web3 Agentic Buiders Hackathon Z.AI赛道 冠军作品
+> 🏆 AI x Web3 Agentic Buiders Hackathon Z.AI赛道 冠军作品
 
 **一句话**：输入一个链上项目或合约地址，Digital Pompeii 会让自主 Agent 从公开链上证据中还原事故原因，生成一份可复核、可读懂的「死亡报告」，并把它整理成一件面向后来者的链上安全展品。
 
